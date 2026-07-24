@@ -1,0 +1,23 @@
+{% set progress = run_progress(job, operation) if job else run_progress(None, operation) %}
+<section id="run-progress" class="run-progress-card progress-{{ progress.kind }}" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <div class="progress-identity">
+    <span class="progress-icon"><i data-lucide="{% if progress.kind == 'train' %}chart-no-axes-column-increasing{% elif progress.kind == 'video' %}film{% else %}scan-line{% endif %}"></i></span>
+    <div>
+      <span class="panel-kicker">Current progress</span>
+      <h2>{{ progress.title }}</h2>
+    </div>
+  </div>
+  <div class="progress-body">
+    <div class="progress-copy">
+      <strong>{{ progress.summary }}</strong>
+      <span>{{ progress.detail }}</span>
+    </div>
+    <div class="task-progress-track{% if progress.indeterminate %} is-indeterminate{% endif %}" role="progressbar" aria-label="{{ progress.title }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress.percent }}">
+      <i style="--progress: {{ progress.percent }}%"></i>
+    </div>
+  </div>
+  <strong class="progress-percent">{{ progress.percent_label }}</strong>
+  <dl class="progress-stats">
+    {% for label, value in progress.stats %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+  </dl>
+</section>

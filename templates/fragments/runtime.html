@@ -1,0 +1,6 @@
+<div id="runtime-status" class="runtime-status" aria-label="Runtime status">
+  <span class="status-dot {% if runtime.cuda == 'available' %}is-ready{% endif %}"></span>
+  <span><strong>{% if runtime.cuda == 'available' %}GPU{% else %}CPU{% endif %}</strong></span>
+  <span class="runtime-detail">Torch {{ runtime.torch }}</span>
+  {% if runtime.gpu_list %}<span class="runtime-detail">{{ runtime.gpu_list | length }} GPU</span>{% endif %}
+</div>

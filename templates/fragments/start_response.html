@@ -1,0 +1,4 @@
+{% include 'fragments/run_inspector.html' %}
+{% set oob = true %}{% include 'fragments/run_progress.html' %}
+{% include 'fragments/run_log.html' %}
+<section id="run-results" hx-swap-oob="true" hx-get="/fragments/jobs/{{ job.id }}/results" hx-trigger="load, every 2s" hx-swap="outerHTML"></section>

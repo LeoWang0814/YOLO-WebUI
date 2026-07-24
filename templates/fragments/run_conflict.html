@@ -1,0 +1,8 @@
+<section id="run-inspector" class="run-inspector conflict-state">
+  <div class="inspector-header"><div><span class="status-label is-warning"><i></i>Name in use</span><h2>{{ run_name }}</h2></div></div>
+  <p class="run-message">Choose another training run name.</p>
+  <div class="button-stack">
+    <button type="button" class="button button-secondary button-full" data-use-run-name="{{ suggestion }}">Use {{ suggestion }}</button>
+    <button class="button button-primary button-full" type="button" data-start-run hx-post="/runs/{{ operation }}" hx-include="#run-form" hx-target="#run-inspector" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="this" hx-sync="this:drop"><span class="button-label"><i data-lucide="rotate-cw"></i>Retry</span><span class="button-loading"><i data-lucide="loader-circle"></i>Starting</span></button>
+  </div>
+</section>

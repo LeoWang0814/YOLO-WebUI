@@ -1,0 +1,5 @@
+<section id="run-inspector" class="run-inspector conflict-state" role="alert">
+  <div class="inspector-header"><div><span class="status-label is-error"><i></i>Not started</span><h2>{{ title }}</h2></div></div>
+  <p class="run-message">{{ message }}</p>
+  <button class="button button-primary button-full" type="button" data-start-run hx-post="/runs/{{ operation }}" hx-include="#run-form" hx-target="#run-inspector" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="this" hx-sync="this:drop"><span class="button-label"><i data-lucide="rotate-cw"></i>Retry</span><span class="button-loading"><i data-lucide="loader-circle"></i>Starting</span></button>
+</section>

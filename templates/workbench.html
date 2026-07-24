@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block title %}{{ operation | title }} - YOLOv10 Workbench{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <h1>{{ 'New training run' if operation == 'train' else 'New prediction run' }}</h1>
+  <span class="queue-note"><i data-lucide="circle-dot"></i>Local runtime</span>
+</section>
+
+<div class="workbench-flow">
+  <form id="run-form" class="configuration-form" method="post" action="/runs/{{ operation }}" enctype="multipart/form-data" hx-post="/fragments/preview/{{ operation }}" hx-trigger="load, input changed delay:500ms, change delay:500ms from:select, change delay:500ms from:input:not([type=file])" hx-target="#command-preview" hx-swap="outerHTML">
+    <div class="configuration-header"><h2>Configuration</h2><i data-lucide="settings-2"></i></div>
+
+    {% if operation == 'train' %}
+    <section class="form-section">
+      <div class="section-heading"><h2>Dataset</h2></div>
+      <div class="inline-field-action">
+        <label class="field"><span>Dataset config</span><input name="data_path" required placeholder="datasets/coco8.yaml" value="{{ values.data_path }}"></label>
+        <button class="button button-secondary button-compact" type="button" hx-post="/fragments/validate-dataset" hx-include="[name='data_path']" hx-target="#dataset-validation" hx-disabled-elt="this"><i data-lucide="badge-check"></i>Validate</button>
+      </div>
+      <div id="dataset-validation" class="dataset-validation is-neutral"><i data-lucide="file-search"></i><span>No dataset selected</span></div>
+    </section>
+    {% endif %}
+
+    <section class="form-section">
+      <div class="section-heading"><h2>Model</h2></div>
+      <div class="segmented" data-segmented>
+        <label><input type="radio" name="model_source" value="pretrained" checked><span>Pretrained</span></label>
+        <label><input type="radio" name="model_source" value="local"><span>Local .pt</span></label>
+      </div>
+      <div class="conditional-block" data-conditional="model_source:pretrained">
+        <label class="field"><span>Pretrained model</span><select name="pretrained_model" hx-get="/fragments/model-hint" hx-trigger="change" hx-target="#model-hint">{% for choice in model_choices %}<option value="{{ choice }}" {% if choice == values.pretrained_model %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select></label>
+        <p id="model-hint" class="field-hint">{{ model_hint }}</p>
+      </div>
+      <div class="conditional-block" data-conditional="model_source:local" hidden>
+        <label class="field"><span>Local model path</span><input id="local-model-path" name="local_model" placeholder="models/custom.pt"></label>
+        <label class="upload-drop"><input name="model_upload" type="file" accept=".pt" hx-post="/fragments/models/upload" hx-trigger="change" hx-target="#model-upload-status" hx-encoding="multipart/form-data" hx-disabled-elt="this"><i data-lucide="upload"></i><span><strong>Choose a .pt file</strong><small data-file-summary>No file selected</small></span></label>
+        <div id="model-upload-status"></div>
+      </div>
+    </section>
+
+    {% if operation == 'predict' %}
+    <section class="form-section">
+      <div class="section-heading"><h2>Source</h2></div>
+      <div class="segmented" data-segmented>
+        <label><input type="radio" name="source_type" value="images" checked><span>Images</span></label>
+        <label><input type="radio" name="source_type" value="video"><span>Video</span></label>
+        <label><input type="radio" name="source_type" value="path"><span>Path</span></label>
+        <label><input type="radio" name="source_type" value="url"><span>URL</span></label>
+      </div>
+      <label class="upload-drop" data-conditional="source_type:images"><input name="images" type="file" accept="image/*" multiple><i data-lucide="images"></i><span><strong>Choose images</strong><small data-file-summary>No files selected</small></span></label>
+      <label class="upload-drop" data-conditional="source_type:video" hidden><input name="video" type="file" accept="video/*"><i data-lucide="file-video"></i><span><strong>Choose a video</strong><small data-file-summary>No file selected</small></span></label>
+      <label class="field conditional-block" data-conditional="source_type:path" hidden><span>Source path</span><input name="source_path" placeholder="C:\data\images"></label>
+      <label class="field conditional-block" data-conditional="source_type:url" hidden><span>Source URL</span><input name="source_url" type="url" placeholder="https://example.com/image.jpg"></label>
+    </section>
+    {% endif %}
+
+    <section class="form-section core-settings">
+      <div class="section-heading"><h2>{{ 'Training parameters' if operation == 'train' else 'Prediction parameters' }}</h2></div>
+      {% if operation == 'train' %}
+      <div class="field-grid">
+        <label class="field"><span>Epochs</span><input type="number" name="epochs" min="1" value="{{ values.epochs }}"></label>
+        <label class="field"><span>Patience</span><input type="number" name="patience" min="0" value="{{ values.patience }}"></label>
+        <label class="field"><span>Image size</span><input type="number" name="imgsz" min="32" value="{{ values.imgsz }}"></label>
+        <label class="field"><span>Batch</span><select name="batch"><option value="auto">Auto</option>{% for batch in [1,2,4,8,16,32,64] %}<option value="{{ batch }}" {% if values.batch == batch %}selected{% endif %}>{{ batch }}</option>{% endfor %}</select></label>
+        <label class="field"><span>Workers</span><input type="number" name="workers" min="0" value="{{ values.workers }}"></label>
+        <label class="field field-span-2"><span>Run name <small>optional</small></span><input id="run-name" name="run_name" placeholder="experiment-01"></label>
+      </div>
+      {% else %}
+      <div class="field-grid">
+        <label class="field"><span>Confidence</span><input type="number" name="conf" min="0" max="1" step="0.01" value="{{ values.conf }}"></label>
+        <label class="field"><span>IoU</span><input type="number" name="iou" min="0" max="1" step="0.01" value="{{ values.iou }}"></label>
+        <label class="field"><span>Image size</span><input type="number" name="imgsz" min="32" value="{{ values.imgsz }}"></label>
+      </div>
+      {% endif %}
+      <div class="device-grid">
+        <label class="field"><span>Device</span><select name="device_mode" data-device-mode><option value="auto">Auto</option><option value="cpu">CPU</option><option value="single">Single GPU</option><option value="multi">Multiple GPUs</option></select></label>
+        <label class="field" data-conditional="device_mode:single" hidden><span>GPU</span><select name="single_gpu">{% for gpu in gpu_ids %}<option value="{{ gpu }}">GPU {{ gpu }}</option>{% endfor %}</select></label>
+        <fieldset data-conditional="device_mode:multi" hidden><legend>GPUs</legend>{% for gpu in gpu_ids %}<label class="check-field"><input type="checkbox" name="multi_gpu" value="{{ gpu }}" {% if loop.first %}checked{% endif %}>GPU {{ gpu }}</label>{% else %}<span class="field-hint">No CUDA devices detected</span>{% endfor %}</fieldset>
+      </div>
+    </section>
+
+    <details class="expert-settings">
+      <summary><span><i data-lucide="sliders-horizontal"></i>Advanced settings</span><small>Ultralytics</small></summary>
+      <div class="expert-content">
+        <div class="expert-toolbar"><label class="field"><span>Find a parameter</span><input type="search" data-parameter-search placeholder="lr0, mosaic, amp..."></label></div>
+        {% for group, fields in expert_groups %}
+        <details class="parameter-group"><summary>{{ group }} <small>{{ fields | length }}</small></summary><div class="parameter-grid">{% for key, default in fields %}<label class="parameter-field" data-parameter-name="{{ key }}"><span>{{ key }}</span>{% if form_control(default) == 'checkbox' %}<input type="hidden" name="expert__{{ key }}" value="false"><input type="checkbox" name="expert__{{ key }}" value="true" {% if default %}checked{% endif %}>{% elif form_control(default) == 'number' %}<input type="number" name="expert__{{ key }}" value="{{ default }}" {% if default is float %}step="any"{% endif %}>{% else %}<input name="expert__{{ key }}" value="{{ '' if default is none else default }}">{% endif %}</label>{% endfor %}</div></details>
+        {% endfor %}
+      </div>
+    </details>
+  </form>
+
+  <div class="execution-grid">
+    {% if active_job %}
+      {% set job = active_job %}{% include 'fragments/run_inspector.html' %}
+    {% else %}
+      <section id="run-inspector" class="run-inspector idle-state">
+        <div class="inspector-header"><div><span class="status-label"><i></i>Ready</span><h2>{{ 'Training run' if operation == 'train' else 'Prediction run' }}</h2></div></div>
+        <dl class="run-summary"><div><dt>Task</dt><dd>Detect</dd></div><div><dt>Queue</dt><dd>Available</dd></div></dl>
+        <button class="button button-primary button-full" type="button" form="run-form" data-start-run hx-post="/runs/{{ operation }}" hx-include="#run-form" hx-target="#run-inspector" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="this" hx-sync="this:drop"><span class="button-label"><i data-lucide="play"></i>{{ 'Start training' if operation == 'train' else 'Run prediction' }}</span><span class="button-loading"><i data-lucide="loader-circle"></i>Starting</span></button>
+      </section>
+    {% endif %}
+    <section class="command-panel">
+      <div class="command-heading"><div><span class="panel-kicker">Ultralytics CLI</span><h2><i data-lucide="terminal"></i>Command</h2></div><span>Live preview</span></div>
+      <div id="command-preview" class="command-preview"><code>Complete the required fields to preview the command.</code></div>
+    </section>
+  </div>
+
+  {% include 'fragments/run_progress.html' %}
+  {% include 'fragments/run_log.html' %}
+</div>
+
+<section id="run-results" class="run-results" {% if active_job %}hx-get="/fragments/jobs/{{ active_job.id }}/results" hx-trigger="load, every 2s" hx-swap="outerHTML"{% endif %}><div class="result-heading"><h2>Results</h2></div><div class="empty-output compact-empty"><i data-lucide="inbox"></i><span>Results will appear here after the run starts.</span></div></section>
+{% endblock %}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}YOLOv10 Workbench{% endblock %}</title>
+  <script>
+    (() => {
+      const preference = localStorage.getItem("yolov10-workbench.theme") || "system";
+      const theme = preference === "system"
+        ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : preference;
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.themePreference = preference;
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ asset_version }}">
+  <script src="/assets/plotly.min.js"></script>
+  <script defer src="/static/vendor/htmx.min.js"></script>
+  <script defer src="/static/vendor/lucide.min.js"></script>
+  <script defer src="/static/js/app.js?v={{ asset_version }}"></script>
+</head>
+<body>
+  <div class="application-shell">
+    <header class="topbar">
+      <a class="wordmark" href="/?operation=train" aria-label="YOLOv10 Workbench home">
+        <span class="wordmark-name">YOLO</span><span class="wordmark-version">v10</span>
+      </a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/?operation=train" {% if current_page == 'train' %}aria-current="page"{% endif %}><i data-lucide="graduation-cap"></i>Train</a>
+        <a href="/?operation=predict" {% if current_page == 'predict' %}aria-current="page"{% endif %}><i data-lucide="scan-line"></i>Predict</a>
+        <a href="/runs" {% if current_page == 'runs' %}aria-current="page"{% endif %}><i data-lucide="history"></i>Runs</a>
+      </nav>
+      <div class="topbar-actions">
+        <div id="runtime-status" hx-get="/fragments/runtime" hx-trigger="load, every 30s" hx-swap="outerHTML"></div>
+        <div class="theme-menu" aria-label="Theme">
+          <button class="icon-button" type="button" data-theme-toggle aria-label="Theme" title="Theme" aria-haspopup="menu" aria-expanded="false"><i data-lucide="sun-moon"></i></button>
+          <div class="theme-popover" role="menu">
+            <button type="button" data-theme-choice="system" role="menuitem"><i data-lucide="monitor"></i>System</button>
+            <button type="button" data-theme-choice="light" role="menuitem"><i data-lucide="sun"></i>Light</button>
+            <button type="button" data-theme-choice="dark" role="menuitem"><i data-lucide="moon"></i>Dark</button>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main>{% block content %}{% endblock %}</main>
+    <div id="app-feedback" class="feedback-region" role="status" aria-live="polite"></div>
+  </div>
+</body>
+</html>

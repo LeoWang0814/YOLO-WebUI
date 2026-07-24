@@ -1,0 +1,15 @@
+<section id="run-inspector" class="run-inspector" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <div class="inspector-header">
+    <div><span class="status-label {% if job.active %}is-live{% elif job.stage == 'completed' %}is-complete{% else %}is-error{% endif %}"><i></i>{{ 'Running' if job.active else job.stage | title }}</span><h2>{{ job.kind | title }} run</h2></div>
+  </div>
+  <dl class="run-summary"><div><dt>Run</dt><dd title="{{ job.run_dir }}">{{ job.run_dir.name }}</dd></div><div><dt>Process</dt><dd>{% if job.active %}Active{% elif job.returncode is none %}Not started{% else %}Exit {{ job.returncode }}{% endif %}</dd></div></dl>
+  {% if job.kind == 'train' %}
+    <dl class="weight-facts"><div><dt>Best weights</dt><dd title="{{ weight_path(job, 'best.pt') or '' }}">{{ weight_path(job, 'best.pt') or 'Pending' }}</dd></div><div><dt>Last weights</dt><dd title="{{ weight_path(job, 'last.pt') or '' }}">{{ weight_path(job, 'last.pt') or 'Pending' }}</dd></div></dl>
+  {% endif %}
+  {% if job.error %}<div class="run-error"><i data-lucide="circle-alert"></i><span>{{ job.error }}</span></div>{% endif %}
+  {% if job.active %}
+    <button class="button button-stop button-full" type="button" hx-post="/runs/{{ job.id }}/stop" hx-target="#run-inspector" hx-swap="outerHTML" hx-disabled-elt="this" hx-sync="this:drop"><span class="button-label"><i data-lucide="square"></i>Stop</span><span class="button-loading"><i data-lucide="loader-circle"></i>Stopping</span></button>
+  {% else %}
+    <a class="button button-secondary button-full" href="/runs/{{ job.kind }}/{{ job.run_dir.name }}"><i data-lucide="folder-open"></i>Open run</a>
+  {% endif %}
+</section>

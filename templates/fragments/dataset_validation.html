@@ -1,0 +1,11 @@
+<div id="dataset-validation" class="dataset-validation {% if dataset.error %}is-error{% endif %}" role="status" aria-live="polite">
+  {% if dataset.error %}
+    <i data-lucide="circle-alert"></i><span>{{ dataset.error }}</span>
+  {% else %}
+    {% for split in dataset.splits %}
+      <div class="dataset-split {% if split.ready %}is-ready{% else %}is-missing{% endif %}">
+        <strong>{{ split.name }}</strong><span>{{ split.count if split.count is not none else 'Missing' }} images</span><small>{{ split.path }}</small>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>

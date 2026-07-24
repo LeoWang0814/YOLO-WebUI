@@ -1,0 +1,9 @@
+<section id="run-log" class="run-log-card" data-log-fragment>
+  <div class="terminal-heading"><div><span class="panel-kicker">Runtime output</span><h2>Command log</h2></div><span class="terminal-follow-status is-paused"><i></i><span>Disconnected</span></span></div>
+  <pre class="terminal-output" data-log-output tabindex="0">{{ message }}</pre>
+</section>
+<section id="run-inspector" class="run-inspector conflict-state" hx-swap-oob="outerHTML" role="alert">
+  <div class="inspector-header"><div><span class="status-label is-warning"><i></i>Status unavailable</span><h2>Run disconnected</h2></div></div>
+  <p class="run-message">{{ message }}</p>
+  <a class="button button-secondary button-full" href="/runs"><i data-lucide="history"></i>Open runs</a>
+</section>

@@ -1,0 +1,15 @@
+<section id="run-results" class="run-results" {% if job and job.active %}hx-get="/fragments/jobs/{{ job.id }}/results" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <div class="result-heading"><h2>{% if job %}{{ job.kind | title }} results{% else %}Results{% endif %}</h2>{% if run_dir %}<a href="/runs/{{ run_dir.parent.name }}/{{ run_dir.name }}">Open run <i data-lucide="arrow-up-right"></i></a>{% endif %}</div>
+  {% if job and job.kind == 'train' %}
+    {% if metrics.ready %}
+      <div class="metric-strip">{% for metric in metrics.summary %}<div><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>{% endfor %}</div>
+      <div class="chart-grid"><div class="chart" data-plot='{{ metrics.figures.loss }}'></div><div class="chart" data-plot='{{ metrics.figures.quality }}'></div><div class="chart chart-wide" data-plot='{{ metrics.figures.learning_rate }}'></div></div>
+      <div class="metrics-table-wrap"><table><thead><tr>{% for column in metrics.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead><tbody>{% for row in metrics.rows | reverse %}<tr>{% for column in metrics.columns %}<td>{{ row.get(column, '') }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+    {% else %}<div class="empty-output compact-empty"><i data-lucide="chart-no-axes-combined"></i><span>{{ metrics.message }}</span></div>{% endif %}
+  {% elif job %}
+    {% if images or video %}
+      {% if images %}<div class="image-gallery">{% for image in images %}<a href="{{ media_url(image) }}" target="_blank"><img src="{{ media_url(image) }}" alt="Processed detection output"></a>{% endfor %}</div>{% endif %}
+      {% if video %}<video class="output-video" controls src="{{ media_url(video) }}"></video>{% endif %}
+    {% elif job.active %}<div class="empty-output compact-empty"><i data-lucide="loader-circle"></i><span>Waiting for output</span></div>{% else %}<div class="empty-output compact-empty"><i data-lucide="image-off"></i><span>No generated artifacts</span></div>{% endif %}
+  {% else %}<div class="empty-output compact-empty"><i data-lucide="inbox"></i><span>Results will appear here after the run starts.</span></div>{% endif %}
+</section>

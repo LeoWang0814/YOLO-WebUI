@@ -1,0 +1,10 @@
+<section id="run-log" class="run-log-card" data-log-fragment {% if oob %}hx-swap-oob="outerHTML"{% endif %} {% if job and job.active %}hx-get="/fragments/jobs/{{ job.id }}/activity" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <div class="terminal-heading">
+    <div>
+      <span class="panel-kicker">Runtime output</span>
+      <h2>Command log</h2>
+    </div>
+    <span class="terminal-follow-status" data-log-follow-status><i></i><span>{% if job and job.active %}Following output{% else %}Output idle{% endif %}</span></span>
+  </div>
+  <pre class="terminal-output" data-log-output tabindex="0" aria-label="Runtime command output">{% if job and job.logs %}{{ job.logs | join('\n') }}{% elif job %}Waiting for process output...{% else %}Runtime output will appear here after the run starts.{% endif %}</pre>
+</section>

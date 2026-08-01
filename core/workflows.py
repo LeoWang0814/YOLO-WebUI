@@ -258,7 +258,7 @@ def ensure_web_video(path: Path) -> Path:
         return path
 
 
-def collect_outputs(run_dir: Path) -> Tuple[List[Path], Optional[Path]]:
+def collect_outputs(run_dir: Path, prepare_video: bool = True) -> Tuple[List[Path], Optional[Path]]:
     images = sorted(
         [
             path
@@ -277,7 +277,9 @@ def collect_outputs(run_dir: Path) -> Tuple[List[Path], Optional[Path]]:
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
-    return images, ensure_web_video(videos[0]) if videos else None
+    source_videos = [path for path in videos if not path.stem.endswith("_web")]
+    video = (source_videos or videos)[0] if videos else None
+    return images, ensure_web_video(video) if video and prepare_video else video
 
 
 def validate_dataset(path_value: str) -> Dict[str, Any]:

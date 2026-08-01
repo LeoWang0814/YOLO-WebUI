@@ -286,7 +286,6 @@ body.is-viewer-open { overflow: hidden; }
 .media-viewer-empty { display: grid; place-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .media-viewer-empty svg { width: 26px; height: 26px; color: var(--faint); }
 .media-viewer-footer { display: flex; min-height: 46px; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 15px 9px 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
-.media-viewer-hint { margin-left: auto; color: var(--faint); }
 .media-viewer-footer a { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-weight: 700; white-space: nowrap; }
 .media-viewer-footer a svg { width: 13px; height: 13px; }
 
@@ -344,8 +343,7 @@ body.is-viewer-open { overflow: hidden; }
   .media-viewer { padding: 8px; }
   .media-viewer-dialog { height: min(760px, 100%); }
   .media-viewer-header { min-height: 56px; padding-left: 13px; }
-  .media-viewer-footer { align-items: flex-start; flex-wrap: wrap; flex-direction: row; gap: 5px 12px; }
-  .media-viewer-hint { order: 3; width: 100%; margin-left: 0; }
+  .media-viewer-footer { align-items: flex-start; flex-direction: column; gap: 5px; }
   .run-progress-card { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 15px; }
   .progress-body { grid-column: 1 / -1; grid-row: 2; }
   .progress-percent { grid-column: 2; grid-row: 1; }

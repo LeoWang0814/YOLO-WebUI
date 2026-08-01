@@ -274,7 +274,7 @@ def _list_runs() -> List[Dict[str, Any]]:
                 continue
             if not run_has_content(run_dir):
                 continue
-            images, video = collect_outputs(run_dir)
+            images, video = collect_outputs(run_dir, prepare_video=False)
             records.append(
                 {
                     "kind": kind,

@@ -48,18 +48,19 @@
           <div class="media-viewer-title"><span class="panel-kicker">Preview</span><h2 data-viewer-title>Media</h2></div>
           <div class="media-viewer-actions">
             <button class="viewer-icon-button" type="button" data-viewer-zoom-out aria-label="Zoom out" title="Zoom out"><i data-lucide="zoom-out"></i></button>
-            <button class="viewer-icon-button" type="button" data-viewer-reset aria-label="Reset zoom" title="Reset zoom"><i data-lucide="scan"></i></button>
+            <button class="viewer-icon-button" type="button" data-viewer-reset aria-label="Fit image to view" title="Fit image to view"><i data-lucide="scan"></i></button>
             <button class="viewer-icon-button" type="button" data-viewer-zoom-in aria-label="Zoom in" title="Zoom in"><i data-lucide="zoom-in"></i></button>
             <button class="viewer-icon-button viewer-close" type="button" data-viewer-close aria-label="Close viewer" title="Close viewer"><i data-lucide="x"></i></button>
           </div>
         </header>
         <div class="media-viewer-stage" data-viewer-stage>
-          <img data-viewer-image alt="" hidden>
+          <img data-viewer-image alt="" draggable="false" hidden>
           <video data-viewer-video controls playsinline hidden></video>
           <div class="media-viewer-empty" data-viewer-empty hidden><i data-lucide="image-off"></i><span>Media unavailable</span></div>
         </div>
         <footer class="media-viewer-footer">
-          <span data-viewer-caption>100%</span>
+          <span data-viewer-caption>Fit to view</span>
+          <span class="media-viewer-hint">Scroll to zoom · Drag to pan</span>
           <a data-viewer-open target="_blank" rel="noreferrer">Open original <i data-lucide="arrow-up-right"></i></a>
         </footer>
       </section>

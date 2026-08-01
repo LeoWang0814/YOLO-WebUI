@@ -150,7 +150,18 @@
     }
   };
 
-  const viewerState = { scale: 1, offsetX: 0, offsetY: 0, dragging: false, startX: 0, startY: 0, restoreFocus: null };
+  const viewerState = {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    dragging: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    baseWidth: 0,
+    baseHeight: 0,
+    restoreFocus: null,
+  };
 
   const getViewer = () => document.querySelector("#media-viewer");
 
@@ -162,13 +173,38 @@
     return image && !image.hidden ? image : (video && !video.hidden ? video : null);
   };
 
+  const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum);
+
+  const getViewerStage = () => getViewer()?.querySelector("[data-viewer-stage]");
+
+  const updateViewerInteractionState = () => {
+    const stage = getViewerStage();
+    if (!stage) return;
+    stage.classList.toggle("is-pannable", viewerState.scale > 1 && Boolean(getViewerMedia()?.matches("img")));
+  };
+
+  const clampViewerOffset = () => {
+    const stage = getViewerStage();
+    if (!stage || viewerState.scale <= 1) {
+      viewerState.offsetX = 0;
+      viewerState.offsetY = 0;
+      return;
+    }
+    const maxX = Math.max(0, (viewerState.baseWidth * viewerState.scale - stage.clientWidth) / 2);
+    const maxY = Math.max(0, (viewerState.baseHeight * viewerState.scale - stage.clientHeight) / 2);
+    viewerState.offsetX = clamp(viewerState.offsetX, -maxX, maxX);
+    viewerState.offsetY = clamp(viewerState.offsetY, -maxY, maxY);
+  };
+
   const applyViewerTransform = () => {
     const viewer = getViewer();
     const media = getViewerMedia();
     if (!viewer || !media) return;
+    clampViewerOffset();
     media.style.transform = `translate3d(${viewerState.offsetX}px, ${viewerState.offsetY}px, 0) scale(${viewerState.scale})`;
     const caption = viewer.querySelector("[data-viewer-caption]");
-    if (caption) caption.textContent = `${Math.round(viewerState.scale * 100)}%`;
+    if (caption) caption.textContent = viewerState.scale === 1 ? "Fit to view" : `${Math.round(viewerState.scale * 100)}%`;
+    updateViewerInteractionState();
   };
 
   const resetViewerTransform = () => {
@@ -178,13 +214,43 @@
     applyViewerTransform();
   };
 
-  const adjustViewerZoom = (delta) => {
-    viewerState.scale = Math.min(5, Math.max(0.5, Number((viewerState.scale + delta).toFixed(2))));
-    if (viewerState.scale <= 1) {
-      viewerState.offsetX = 0;
-      viewerState.offsetY = 0;
+  const fitViewerMedia = () => {
+    const stage = getViewerStage();
+    const media = getViewerMedia();
+    if (!stage || !media || !stage.clientWidth || !stage.clientHeight) return;
+    const sourceWidth = media.matches("img") ? media.naturalWidth : media.videoWidth;
+    const sourceHeight = media.matches("img") ? media.naturalHeight : media.videoHeight;
+    if (!sourceWidth || !sourceHeight) return;
+    const scale = Math.min(stage.clientWidth / sourceWidth, stage.clientHeight / sourceHeight);
+    viewerState.baseWidth = Math.max(1, Math.floor(sourceWidth * scale));
+    viewerState.baseHeight = Math.max(1, Math.floor(sourceHeight * scale));
+    media.style.width = `${viewerState.baseWidth}px`;
+    media.style.height = `${viewerState.baseHeight}px`;
+    applyViewerTransform();
+  };
+
+  const setViewerScale = (nextScale, point) => {
+    const stage = getViewerStage();
+    const previousScale = viewerState.scale;
+    viewerState.scale = clamp(Number(nextScale.toFixed(2)), 1, 5);
+    if (point && stage && viewerState.scale !== previousScale) {
+      const relativeX = point.clientX - stage.getBoundingClientRect().left - stage.clientWidth / 2;
+      const relativeY = point.clientY - stage.getBoundingClientRect().top - stage.clientHeight / 2;
+      const ratio = viewerState.scale / previousScale;
+      viewerState.offsetX = relativeX - (relativeX - viewerState.offsetX) * ratio;
+      viewerState.offsetY = relativeY - (relativeY - viewerState.offsetY) * ratio;
     }
     applyViewerTransform();
+  };
+
+  const adjustViewerZoom = (delta, point) => setViewerScale(viewerState.scale + delta, point);
+
+  const stopViewerDrag = (event) => {
+    const stage = getViewerStage();
+    if (!viewerState.dragging || (event && event.pointerId !== viewerState.pointerId)) return;
+    viewerState.dragging = false;
+    viewerState.pointerId = null;
+    stage?.classList.remove("is-dragging");
   };
 
   const closeViewer = () => {
@@ -198,6 +264,10 @@
     }
     const image = viewer.querySelector("[data-viewer-image]");
     if (image) image.removeAttribute("src");
+    image?.style.removeProperty("width");
+    image?.style.removeProperty("height");
+    resetViewerTransform();
+    stopViewerDrag();
     viewer.hidden = true;
     viewer.setAttribute("aria-hidden", "true");
     document.body.classList.remove("is-viewer-open");
@@ -225,7 +295,10 @@
     video.hidden = kind !== "video";
     if (kind === "image") {
       image.src = src;
-      image.onload = resetViewerTransform;
+      image.onload = () => {
+        resetViewerTransform();
+        fitViewerMedia();
+      };
       image.onerror = () => { image.hidden = true; empty.hidden = false; };
     } else {
       video.src = src;
@@ -248,32 +321,38 @@
     stage.addEventListener("wheel", (event) => {
       if (viewer.hidden) return;
       event.preventDefault();
-      adjustViewerZoom(event.deltaY < 0 ? 0.15 : -0.15);
+      adjustViewerZoom(event.deltaY < 0 ? 0.15 : -0.15, event);
     }, { passive: false });
     stage.addEventListener("pointerdown", (event) => {
       const image = viewer.querySelector("[data-viewer-image]");
-      if (viewer.hidden || image?.hidden || viewerState.scale <= 1) return;
+      if (viewer.hidden || image?.hidden || viewerState.scale <= 1 || !event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+      event.preventDefault();
       viewerState.dragging = true;
+      viewerState.pointerId = event.pointerId;
       viewerState.startX = event.clientX - viewerState.offsetX;
       viewerState.startY = event.clientY - viewerState.offsetY;
       stage.classList.add("is-dragging");
       stage.setPointerCapture?.(event.pointerId);
     });
     stage.addEventListener("pointermove", (event) => {
-      if (!viewerState.dragging) return;
+      if (!viewerState.dragging || event.pointerId !== viewerState.pointerId) return;
+      event.preventDefault();
       viewerState.offsetX = event.clientX - viewerState.startX;
       viewerState.offsetY = event.clientY - viewerState.startY;
       applyViewerTransform();
     });
-    stage.addEventListener("pointerup", () => {
-      viewerState.dragging = false;
-      stage.classList.remove("is-dragging");
-    });
-    stage.addEventListener("dblclick", () => {
+    stage.addEventListener("pointerup", stopViewerDrag);
+    stage.addEventListener("pointercancel", stopViewerDrag);
+    stage.addEventListener("lostpointercapture", stopViewerDrag);
+    stage.addEventListener("dblclick", (event) => {
       if (!viewer.hidden) {
-        if (viewerState.scale === 1) adjustViewerZoom(1);
+        event.preventDefault();
+        if (viewerState.scale === 1) setViewerScale(2, event);
         else resetViewerTransform();
       }
+    });
+    window.addEventListener("resize", () => {
+      if (!viewer.hidden) window.requestAnimationFrame(fitViewerMedia);
     });
   };
 

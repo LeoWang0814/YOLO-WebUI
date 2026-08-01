@@ -8,8 +8,8 @@
     {% else %}<div class="empty-output compact-empty"><i data-lucide="chart-no-axes-combined"></i><span>{{ metrics.message }}</span></div>{% endif %}
   {% elif job %}
     {% if images or video %}
-      {% if images %}<div class="image-gallery">{% for image in images %}<a href="{{ media_url(image) }}" target="_blank"><img src="{{ media_url(image) }}" alt="Processed detection output"></a>{% endfor %}</div>{% endif %}
-      {% if video %}<video class="output-video" controls src="{{ media_url(video) }}"></video>{% endif %}
+      {% if images %}<div class="image-gallery">{% for image in images %}<a href="{{ media_url(image) }}" data-viewer-media data-media-kind="image" data-media-src="{{ media_url(image) }}" data-media-label="{{ image.name }}"><img src="{{ media_url(image) }}" alt="Processed detection output"></a>{% endfor %}</div>{% endif %}
+      {% if video %}<div class="video-preview"><video class="output-video" controls src="{{ media_url(video) }}"></video><button class="media-open-button" type="button" data-viewer-media data-media-kind="video" data-media-src="{{ media_url(video) }}" data-media-label="Prediction video" aria-label="Open video viewer" title="Open video viewer"><i data-lucide="maximize-2"></i></button></div>{% endif %}
     {% elif job.active %}<div class="empty-output compact-empty"><i data-lucide="loader-circle"></i><span>Waiting for output</span></div>{% else %}<div class="empty-output compact-empty"><i data-lucide="image-off"></i><span>No generated artifacts</span></div>{% endif %}
   {% else %}<div class="empty-output compact-empty"><i data-lucide="inbox"></i><span>Results will appear here after the run starts.</span></div>{% endif %}
 </section>

@@ -11,9 +11,7 @@
     const theme = actualTheme(preference);
     root.dataset.theme = theme;
     root.dataset.themePreference = preference;
-    document.querySelectorAll("[data-theme-choice]").forEach((button) => {
-      button.setAttribute("aria-checked", String(button.dataset.themeChoice === preference));
-    });
+    updateThemeToggle(theme);
     document.querySelectorAll("[data-plot]").forEach((chart) => { delete chart.dataset.plotReady; });
     const results = document.querySelector("#run-results[hx-get]");
     if (results && window.htmx) window.htmx.trigger(results, "load");
@@ -38,6 +36,16 @@
 
   const initializeIcons = () => {
     if (window.lucide) window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } });
+  };
+
+  const updateThemeToggle = (theme) => {
+    const toggle = document.querySelector("[data-theme-toggle]");
+    if (!toggle) return;
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    toggle.setAttribute("aria-label", `Switch to ${nextTheme} theme`);
+    toggle.setAttribute("title", `Switch to ${nextTheme} theme`);
+    toggle.innerHTML = `<i data-lucide="${theme === "dark" ? "sun" : "moon"}"></i>`;
+    initializeIcons();
   };
 
   const refreshConditionals = (scope = document) => {
@@ -142,9 +150,131 @@
     }
   };
 
-  const closeThemeMenu = () => {
-    document.querySelector(".theme-popover")?.classList.remove("is-open");
-    document.querySelector("[data-theme-toggle]")?.setAttribute("aria-expanded", "false");
+  const viewerState = { scale: 1, offsetX: 0, offsetY: 0, dragging: false, startX: 0, startY: 0, restoreFocus: null };
+
+  const getViewer = () => document.querySelector("#media-viewer");
+
+  const getViewerMedia = () => {
+    const viewer = getViewer();
+    if (!viewer) return null;
+    const image = viewer.querySelector("[data-viewer-image]");
+    const video = viewer.querySelector("[data-viewer-video]");
+    return image && !image.hidden ? image : (video && !video.hidden ? video : null);
+  };
+
+  const applyViewerTransform = () => {
+    const viewer = getViewer();
+    const media = getViewerMedia();
+    if (!viewer || !media) return;
+    media.style.transform = `translate3d(${viewerState.offsetX}px, ${viewerState.offsetY}px, 0) scale(${viewerState.scale})`;
+    const caption = viewer.querySelector("[data-viewer-caption]");
+    if (caption) caption.textContent = `${Math.round(viewerState.scale * 100)}%`;
+  };
+
+  const resetViewerTransform = () => {
+    viewerState.scale = 1;
+    viewerState.offsetX = 0;
+    viewerState.offsetY = 0;
+    applyViewerTransform();
+  };
+
+  const adjustViewerZoom = (delta) => {
+    viewerState.scale = Math.min(5, Math.max(0.5, Number((viewerState.scale + delta).toFixed(2))));
+    if (viewerState.scale <= 1) {
+      viewerState.offsetX = 0;
+      viewerState.offsetY = 0;
+    }
+    applyViewerTransform();
+  };
+
+  const closeViewer = () => {
+    const viewer = getViewer();
+    if (!viewer || viewer.hidden) return;
+    const video = viewer.querySelector("[data-viewer-video]");
+    video?.pause();
+    if (video) {
+      video.removeAttribute("src");
+      video.load();
+    }
+    const image = viewer.querySelector("[data-viewer-image]");
+    if (image) image.removeAttribute("src");
+    viewer.hidden = true;
+    viewer.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("is-viewer-open");
+    viewerState.restoreFocus?.focus();
+    viewerState.restoreFocus = null;
+  };
+
+  const openViewer = (trigger) => {
+    const viewer = getViewer();
+    if (!viewer) return;
+    const kind = trigger.dataset.mediaKind || "image";
+    const src = trigger.dataset.mediaSrc || trigger.getAttribute("href");
+    if (!src) return;
+    const image = viewer.querySelector("[data-viewer-image]");
+    const video = viewer.querySelector("[data-viewer-video]");
+    const empty = viewer.querySelector("[data-viewer-empty]");
+    const title = viewer.querySelector("[data-viewer-title]");
+    const original = viewer.querySelector("[data-viewer-open]");
+    viewerState.restoreFocus = trigger;
+    viewerState.scale = 1;
+    viewerState.offsetX = 0;
+    viewerState.offsetY = 0;
+    empty.hidden = true;
+    image.hidden = kind !== "image";
+    video.hidden = kind !== "video";
+    if (kind === "image") {
+      image.src = src;
+      image.onload = resetViewerTransform;
+      image.onerror = () => { image.hidden = true; empty.hidden = false; };
+    } else {
+      video.src = src;
+      video.load();
+    }
+    if (title) title.textContent = trigger.dataset.mediaLabel || (kind === "video" ? "Video" : "Image");
+    if (original) original.href = src;
+    viewer.hidden = false;
+    viewer.setAttribute("aria-hidden", "false");
+    document.body.classList.add("is-viewer-open");
+    resetViewerTransform();
+    viewer.querySelector("[data-viewer-close]")?.focus();
+  };
+
+  const initializeViewer = () => {
+    const viewer = getViewer();
+    const stage = viewer?.querySelector("[data-viewer-stage]");
+    if (!viewer || !stage || viewer.dataset.bound) return;
+    viewer.dataset.bound = "true";
+    stage.addEventListener("wheel", (event) => {
+      if (viewer.hidden) return;
+      event.preventDefault();
+      adjustViewerZoom(event.deltaY < 0 ? 0.15 : -0.15);
+    }, { passive: false });
+    stage.addEventListener("pointerdown", (event) => {
+      const image = viewer.querySelector("[data-viewer-image]");
+      if (viewer.hidden || image?.hidden || viewerState.scale <= 1) return;
+      viewerState.dragging = true;
+      viewerState.startX = event.clientX - viewerState.offsetX;
+      viewerState.startY = event.clientY - viewerState.offsetY;
+      stage.classList.add("is-dragging");
+      stage.setPointerCapture?.(event.pointerId);
+    });
+    stage.addEventListener("pointermove", (event) => {
+      if (!viewerState.dragging) return;
+      viewerState.offsetX = event.clientX - viewerState.startX;
+      viewerState.offsetY = event.clientY - viewerState.startY;
+      applyViewerTransform();
+    });
+    stage.addEventListener("pointerup", () => {
+      viewerState.dragging = false;
+      stage.classList.remove("is-dragging");
+    });
+    stage.addEventListener("dblclick", () => {
+      if (!viewer.hidden) {
+        if (viewerState.scale === 1) adjustViewerZoom(1);
+        else resetViewerTransform();
+      }
+    });
   };
 
   const showFeedback = (message, tone = "error") => {
@@ -175,6 +305,7 @@
     initializeFileInputs(scope);
     initializeLogTerminals();
     initializeRunFilters(scope);
+    initializeViewer();
     renderCharts(scope);
   };
 
@@ -188,25 +319,40 @@
     });
 
     document.addEventListener("click", (event) => {
-      const choice = event.target.closest("[data-theme-choice]");
-      if (choice) {
-        const preference = choice.dataset.themeChoice;
-        localStorage.setItem(preferenceKey, preference);
-        applyTheme(preference);
-        closeThemeMenu();
+      const media = event.target.closest("[data-viewer-media]");
+      if (media) {
+        event.preventDefault();
+        openViewer(media);
         return;
       }
 
       const toggle = event.target.closest("[data-theme-toggle]");
       if (toggle) {
-        const popover = toggle.closest(".theme-menu")?.querySelector(".theme-popover");
-        const open = !popover?.classList.contains("is-open");
-        popover?.classList.toggle("is-open", open);
-        toggle.setAttribute("aria-expanded", String(open));
+        const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
+        localStorage.setItem(preferenceKey, nextTheme);
+        applyTheme(nextTheme);
         return;
       }
 
-      if (!event.target.closest(".theme-menu")) closeThemeMenu();
+      if (event.target.closest("[data-viewer-close]")) {
+        closeViewer();
+        return;
+      }
+
+      if (event.target.closest("[data-viewer-zoom-in]")) {
+        adjustViewerZoom(0.25);
+        return;
+      }
+
+      if (event.target.closest("[data-viewer-zoom-out]")) {
+        adjustViewerZoom(-0.25);
+        return;
+      }
+
+      if (event.target.closest("[data-viewer-reset]")) {
+        resetViewerTransform();
+        return;
+      }
 
       const runName = event.target.closest("[data-use-run-name]");
       if (runName) {
@@ -220,7 +366,13 @@
     });
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeThemeMenu();
+      const viewer = getViewer();
+      if (!viewer?.hidden) {
+        if (event.key === "Escape") closeViewer();
+        if (event.key === "+" || event.key === "=") adjustViewerZoom(0.25);
+        if (event.key === "-") adjustViewerZoom(-0.25);
+        if (event.key === "0") resetViewerTransform();
+      }
     });
 
     document.querySelector("#run-form")?.addEventListener("submit", (event) => {

@@ -230,12 +230,30 @@ def _suggested_name(name: str) -> str:
 def _run_worker(job: RunJob, manager: RunManager, operation: str, args: Dict[str, Any], model_source: str, pretrained_model: str, local_model: str) -> None:
     manager.set_stage(job, "resolving model")
     manager.append_log(job, "[status] Resolving model...")
+    manager.update_details(
+        job,
+        download_active=True,
+        download_percent=0,
+        download_phase="Checking model cache...",
+        download_indeterminate=True,
+    )
 
     def progress(_: float, desc: str = "") -> None:
+        percent = max(0, min(100, int(round(_ * 100))))
+        phase = desc or "Downloading model..."
+        is_terminal = phase.lower().startswith(("verifying", "model cached"))
+        manager.update_details(
+            job,
+            download_active=not is_terminal,
+            download_percent=100 if is_terminal else percent,
+            download_phase=phase,
+            download_indeterminate=not is_terminal and percent <= 0,
+        )
         if desc:
             manager.append_log(job, f"[download] {desc}")
 
     model_path = resolve_model_path(model_source, pretrained_model, local_model, progress=progress)
+    manager.update_details(job, download_active=False, download_percent=100, download_phase="Model ready", download_indeterminate=False)
     args["model"] = str(model_path)
     command, preview = build_command("detect", operation, args)
     write_run_metadata(job.run_dir, args, preview)

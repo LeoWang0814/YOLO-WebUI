@@ -24,9 +24,9 @@
 <body>
   <div class="application-shell">
     <header class="topbar">
-      <a class="wordmark" href="/?operation=train" aria-label="YOLOv10 Workbench home">
+      <div class="wordmark" aria-label="YOLOv10 Workbench">
         <span class="wordmark-name">YOLO</span><span class="wordmark-version">v10</span>
-      </a>
+      </div>
       <nav class="primary-nav" aria-label="Primary navigation">
         <a href="/?operation=train" {% if current_page == 'train' %}aria-current="page"{% endif %}><i data-lucide="graduation-cap"></i>Train</a>
         <a href="/?operation=predict" {% if current_page == 'predict' %}aria-current="page"{% endif %}><i data-lucide="scan-line"></i>Predict</a>
@@ -35,17 +35,35 @@
       <div class="topbar-actions">
         <div id="runtime-status" hx-get="/fragments/runtime" hx-trigger="load, every 30s" hx-swap="outerHTML"></div>
         <div class="theme-menu" aria-label="Theme">
-          <button class="icon-button" type="button" data-theme-toggle aria-label="Theme" title="Theme" aria-haspopup="menu" aria-expanded="false"><i data-lucide="sun-moon"></i></button>
-          <div class="theme-popover" role="menu">
-            <button type="button" data-theme-choice="system" role="menuitem"><i data-lucide="monitor"></i>System</button>
-            <button type="button" data-theme-choice="light" role="menuitem"><i data-lucide="sun"></i>Light</button>
-            <button type="button" data-theme-choice="dark" role="menuitem"><i data-lucide="moon"></i>Dark</button>
-          </div>
+          <button class="icon-button" type="button" data-theme-toggle aria-label="Switch theme" title="Switch theme"><i data-lucide="sun-moon"></i></button>
         </div>
       </div>
     </header>
     <main>{% block content %}{% endblock %}</main>
     <div id="app-feedback" class="feedback-region" role="status" aria-live="polite"></div>
+    <div id="media-viewer" class="media-viewer" hidden aria-hidden="true">
+      <div class="media-viewer-backdrop" data-viewer-close></div>
+      <section class="media-viewer-dialog" role="dialog" aria-modal="true" aria-label="Media viewer">
+        <header class="media-viewer-header">
+          <div class="media-viewer-title"><span class="panel-kicker">Preview</span><h2 data-viewer-title>Media</h2></div>
+          <div class="media-viewer-actions">
+            <button class="viewer-icon-button" type="button" data-viewer-zoom-out aria-label="Zoom out" title="Zoom out"><i data-lucide="zoom-out"></i></button>
+            <button class="viewer-icon-button" type="button" data-viewer-reset aria-label="Reset zoom" title="Reset zoom"><i data-lucide="scan"></i></button>
+            <button class="viewer-icon-button" type="button" data-viewer-zoom-in aria-label="Zoom in" title="Zoom in"><i data-lucide="zoom-in"></i></button>
+            <button class="viewer-icon-button viewer-close" type="button" data-viewer-close aria-label="Close viewer" title="Close viewer"><i data-lucide="x"></i></button>
+          </div>
+        </header>
+        <div class="media-viewer-stage" data-viewer-stage>
+          <img data-viewer-image alt="" hidden>
+          <video data-viewer-video controls playsinline hidden></video>
+          <div class="media-viewer-empty" data-viewer-empty hidden><i data-lucide="image-off"></i><span>Media unavailable</span></div>
+        </div>
+        <footer class="media-viewer-footer">
+          <span data-viewer-caption>100%</span>
+          <a data-viewer-open target="_blank" rel="noreferrer">Open original <i data-lucide="arrow-up-right"></i></a>
+        </footer>
+      </section>
+    </div>
   </div>
 </body>
 </html>

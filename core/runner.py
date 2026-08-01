@@ -92,6 +92,10 @@ class RunManager:
         with self._lock:
             job.stage = stage
 
+    def update_details(self, job: RunJob, **details: Any) -> None:
+        with self._lock:
+            job.details.update(details)
+
     def append_log(self, job: RunJob, line: str) -> None:
         line = re.sub(r"\x1b\[[0-9;]*m", "", line).rstrip("\n")
         if not line:

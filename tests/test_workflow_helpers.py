@@ -131,6 +131,27 @@ def test_task_progress_uses_epoch_image_and_video_log_counters(tmp_path):
     assert video_progress["detail"] == "0:02 of 0:05 video processed"
 
 
+def test_task_progress_surfaces_model_download_in_same_card(tmp_path):
+    job = RunJob(
+        id="download",
+        kind="predict",
+        run_dir=tmp_path / "predict" / "download",
+        stage="resolving model",
+        details={
+            "progress_kind": "images",
+            "download_active": True,
+            "download_percent": 42,
+            "download_phase": "Downloading model... 42.0% 8.50 MB/s",
+            "download_indeterminate": False,
+        },
+    )
+
+    progress = workflows.run_progress(job)
+
+    assert progress["title"] == "Downloading model"
+    assert progress["summary"] == "Model download 42%"
+    assert progress["percent"] == 42
+    assert progress["stats"][-1] == ("Measure", "Model")
 def test_run_manager_rejects_parallel_processes(tmp_path):
     manager = RunManager()
     release = threading.Event()
@@ -209,6 +230,9 @@ def test_fastapi_renders_workbench_and_htmx_preview(client):
     assert page.text.index('id="run-progress"') < page.text.index('id="run-log"') < page.text.index('id="run-results"')
     assert 'class="command-panel"' in page.text
     assert 'class="command-shell"' not in page.text
+    assert 'class="theme-popover"' not in page.text
+    assert 'id="media-viewer"' in page.text
+    assert 'href="/?operation=train" aria-label="YOLOv10 Workbench home"' not in page.text
 
     preview = client.post(
         "/fragments/preview/predict",
@@ -258,6 +282,23 @@ def test_activity_refreshes_log_with_oob_status_and_progress(tmp_path, monkeypat
     assert response.text.index('id="run-log"') < response.text.index('id="run-inspector"')
     assert response.text.count('hx-swap-oob="outerHTML"') == 2
     assert "1 of 2 images" in response.text
+
+
+def test_completed_run_inspector_has_open_and_new_actions(tmp_path, monkeypatch, client):
+    job = RunJob(
+        id="done",
+        kind="predict",
+        run_dir=tmp_path / "predict" / "done",
+        stage="completed",
+        returncode=0,
+    )
+    monkeypatch.setattr(app, "run_manager", PassiveRunManager(job=job))
+
+    response = client.get("/fragments/jobs/done/inspector", headers={"HX-Request": "true"})
+
+    assert response.status_code == 200
+    assert "Open run" in response.text
+    assert "New prediction" in response.text
 
 
 def test_start_validation_is_visible_and_does_not_create_run(tmp_path, monkeypatch, client):

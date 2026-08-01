@@ -10,6 +10,6 @@
   {% if job.active %}
     <button class="button button-stop button-full" type="button" hx-post="/runs/{{ job.id }}/stop" hx-target="#run-inspector" hx-swap="outerHTML" hx-disabled-elt="this" hx-sync="this:drop"><span class="button-label"><i data-lucide="square"></i>Stop</span><span class="button-loading"><i data-lucide="loader-circle"></i>Stopping</span></button>
   {% else %}
-    <a class="button button-secondary button-full" href="/runs/{{ job.kind }}/{{ job.run_dir.name }}"><i data-lucide="folder-open"></i>Open run</a>
+    <div class="inspector-actions"><a class="button button-secondary" href="/runs/{{ job.kind }}/{{ job.run_dir.name }}"><i data-lucide="folder-open"></i>Open run</a><a class="button button-primary" href="/?operation={{ job.kind }}"><i data-lucide="plus"></i>{{ 'New training' if job.kind == 'train' else 'New prediction' }}</a></div>
   {% endif %}
 </section>

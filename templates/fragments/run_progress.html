@@ -1,7 +1,7 @@
 {% set progress = run_progress(job, operation) if job else run_progress(None, operation) %}
 <section id="run-progress" class="run-progress-card progress-{{ progress.kind }}" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
   <div class="progress-identity">
-    <span class="progress-icon"><i data-lucide="{% if progress.kind == 'train' %}chart-no-axes-column-increasing{% elif progress.kind == 'video' %}film{% else %}scan-line{% endif %}"></i></span>
+    <span class="progress-icon"><i data-lucide="{% if progress.title == 'Downloading model' %}download{% elif progress.kind == 'train' %}chart-no-axes-column-increasing{% elif progress.kind == 'video' %}film{% else %}scan-line{% endif %}"></i></span>
     <div>
       <span class="panel-kicker">Current progress</span>
       <h2>{{ progress.title }}</h2>

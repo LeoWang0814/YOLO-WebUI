@@ -424,6 +424,22 @@ def run_progress(job: Optional[RunJob] = None, operation: str = "predict") -> Di
     total = int(job.details.get("total") or 0)
     current = 0
     fps = float(job.details.get("fps") or 0.0)
+    elapsed = _format_duration((datetime.now(timezone.utc) - job.created_at).total_seconds())
+
+    if job.details.get("download_active"):
+        download_percent = max(0, min(100, int(job.details.get("download_percent") or 0)))
+        download_phase = str(job.details.get("download_phase") or "Downloading model...")
+        download_indeterminate = bool(job.details.get("download_indeterminate"))
+        return {
+            "kind": kind,
+            "title": "Downloading model",
+            "summary": f"Model download {download_percent}%" if not download_indeterminate else "Preparing model download",
+            "detail": download_phase,
+            "percent": download_percent,
+            "percent_label": f"{download_percent}%" if not download_indeterminate else "Live",
+            "indeterminate": download_indeterminate,
+            "stats": [("Phase", "Downloading model"), ("Elapsed", elapsed), ("Measure", "Model")],
+        }
 
     if kind == "train":
         try:
@@ -451,7 +467,6 @@ def run_progress(job: Optional[RunJob] = None, operation: str = "predict") -> Di
     if job.stage == "completed" and total:
         current = total
     percent = int(round(current / total * 100)) if total else 0
-    elapsed = _format_duration((datetime.now(timezone.utc) - job.created_at).total_seconds())
     active_phase = {
         "queued": "Queued",
         "resolving model": "Resolving model",

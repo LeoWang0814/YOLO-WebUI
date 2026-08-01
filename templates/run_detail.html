@@ -2,15 +2,15 @@
 {% block title %}{{ run.name }} - YOLOv10 Workbench{% endblock %}
 {% block content %}
 <section class="page-heading">
-  <div><a class="back-link" href="/runs"><i data-lucide="arrow-left"></i>Runs</a><span class="page-eyebrow">{{ run.kind | title }}</span><h1>{{ run.name }}</h1></div>
-  <a class="button button-secondary" href="/?operation={{ run.kind }}"><i data-lucide="plus"></i>New {{ run.kind }}</a>
+  <div class="run-detail-heading"><a class="back-link" href="/runs"><i data-lucide="arrow-left"></i><span>Back to runs</span></a><div class="run-detail-title"><span class="page-eyebrow">{{ run.kind | title }} run</span><h1>{{ run.name }}</h1></div></div>
+  <a class="button button-secondary" href="/?operation={{ run.kind }}"><i data-lucide="plus"></i>{{ 'New training' if run.kind == 'train' else 'New prediction' }}</a>
 </section>
 <section id="run-results" class="run-results">
   {% if run.kind == 'train' %}
     {% if metrics.ready %}<div class="metric-strip">{% for metric in metrics.summary %}<div><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>{% endfor %}</div><div class="chart-grid"><div class="chart" data-plot='{{ metrics.figures.loss }}'></div><div class="chart" data-plot='{{ metrics.figures.quality }}'></div><div class="chart chart-wide" data-plot='{{ metrics.figures.learning_rate }}'></div></div>{% else %}<div class="empty-output compact-empty"><span>{{ metrics.message }}</span></div>{% endif %}
   {% else %}
-    {% if images %}<div class="image-gallery">{% for image in images %}<a href="{{ media_url(image) }}" target="_blank"><img src="{{ media_url(image) }}" alt="Processed detection output"></a>{% endfor %}</div>{% endif %}
-    {% if video %}<video class="output-video" controls src="{{ media_url(video) }}"></video>{% endif %}
+    {% if images %}<div class="image-gallery">{% for image in images %}<a href="{{ media_url(image) }}" data-viewer-media data-media-kind="image" data-media-src="{{ media_url(image) }}" data-media-label="{{ image.name }}"><img src="{{ media_url(image) }}" alt="Processed detection output"></a>{% endfor %}</div>{% endif %}
+    {% if video %}<div class="video-preview"><video class="output-video" controls src="{{ media_url(video) }}"></video><button class="media-open-button" type="button" data-viewer-media data-media-kind="video" data-media-src="{{ media_url(video) }}" data-media-label="Prediction video" aria-label="Open video viewer" title="Open video viewer"><i data-lucide="maximize-2"></i></button></div>{% endif %}
     {% if not images and not video %}<div class="empty-output compact-empty"><span>No generated artifacts</span></div>{% endif %}
   {% endif %}
 </section>

@@ -168,9 +168,6 @@ def _validate_source_form(form: Any) -> None:
     if source_type == "path":
         required_text(form, "source_path", "Source path")
         return
-    if source_type == "url":
-        required_text(form, "source_url", "Source URL")
-        return
     raise ValueError("Invalid source type.")
 
 
@@ -218,8 +215,6 @@ def _preview_source(form: Any) -> str:
     source_type = str(form.get("source_type") or "images")
     if source_type == "path":
         return str(form.get("source_path") or "<source path>")
-    if source_type == "url":
-        return str(form.get("source_url") or "<source URL>")
     return "<uploaded video>" if source_type == "video" else "<uploaded image set>"
 
 
@@ -408,7 +403,6 @@ async def start_run(request: Request, operation: str):
                 staged_images,
                 staged_video,
                 str(form.get("source_path") or "").strip(),
-                str(form.get("source_url") or "").strip(),
             )
             args["source"] = source
             progress_details = prediction_progress_details(
@@ -416,7 +410,6 @@ async def start_run(request: Request, operation: str):
                 staged_images,
                 staged_video,
                 str(form.get("source_path") or "").strip(),
-                str(form.get("source_url") or "").strip(),
             )
         model_source = str(form.get("model_source") or "pretrained")
         pretrained_model = str(form.get("pretrained_model") or "")

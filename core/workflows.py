@@ -10,7 +10,6 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlparse
 
 import cv2
 import pandas as pd
@@ -172,7 +171,6 @@ def prepare_source(
     staged_images: List[Path],
     staged_video: Optional[Path],
     source_path: Optional[str],
-    source_url: Optional[str],
 ) -> str:
     if source_type == "images":
         if not staged_images:
@@ -186,10 +184,6 @@ def prepare_source(
         if not source_path:
             raise ValueError("Provide a source path.")
         return source_path
-    if source_type == "url":
-        if not source_url:
-            raise ValueError("Provide a source URL.")
-        return source_url
     raise ValueError("Invalid source type.")
 
 
@@ -353,7 +347,6 @@ def prediction_progress_details(
     staged_images: List[Path],
     staged_video: Optional[Path],
     source_path: str = "",
-    source_url: str = "",
 ) -> Dict[str, Any]:
     """Describe a prediction source before the worker starts producing log lines."""
     if source_type == "images":
@@ -377,13 +370,6 @@ def prediction_progress_details(
         if path.suffix.lower() in IMAGE_SUFFIXES:
             return {"progress_kind": "images", "total": 1, "source_label": path.name}
         return {"progress_kind": "media", "total": 0, "source_label": path.name or source_path}
-    if source_type == "url":
-        suffix = Path(urlparse(source_url).path).suffix.lower()
-        if suffix in IMAGE_SUFFIXES:
-            return {"progress_kind": "images", "total": 1, "source_label": "Remote image"}
-        if suffix in VIDEO_SUFFIXES:
-            return {"progress_kind": "video", "total": 0, "fps": 0.0, "source_label": "Remote video"}
-        return {"progress_kind": "stream", "total": 0, "source_label": "Remote stream"}
     return {"progress_kind": "media", "total": 0, "source_label": "Prediction source"}
 
 

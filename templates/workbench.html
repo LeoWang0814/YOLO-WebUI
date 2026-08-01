@@ -28,7 +28,7 @@
         <label><input type="radio" name="model_source" value="local"><span>Local .pt</span></label>
       </div>
       <div class="conditional-block" data-conditional="model_source:pretrained">
-        <label class="field"><span>Pretrained model</span><select name="pretrained_model" hx-get="/fragments/model-hint" hx-trigger="change" hx-target="#model-hint">{% for choice in model_choices %}<option value="{{ choice }}" {% if choice == values.pretrained_model %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select></label>
+        <label class="field"><span>Pretrained model</span><select name="pretrained_model" hx-get="/fragments/model-hint" hx-trigger="load, change" hx-target="#model-hint">{% for choice in model_choices %}<option value="{{ choice }}" {% if choice == values.pretrained_model %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select></label>
         <p id="model-hint" class="field-hint">{{ model_hint }}</p>
       </div>
       <div class="conditional-block" data-conditional="model_source:local" hidden>
@@ -45,12 +45,10 @@
         <label><input type="radio" name="source_type" value="images" checked><span>Images</span></label>
         <label><input type="radio" name="source_type" value="video"><span>Video</span></label>
         <label><input type="radio" name="source_type" value="path"><span>Path</span></label>
-        <label><input type="radio" name="source_type" value="url"><span>URL</span></label>
       </div>
       <label class="upload-drop" data-conditional="source_type:images"><input name="images" type="file" accept="image/*" multiple><i data-lucide="images"></i><span><strong>Choose images</strong><small data-file-summary>No files selected</small></span></label>
       <label class="upload-drop" data-conditional="source_type:video" hidden><input name="video" type="file" accept="video/*"><i data-lucide="file-video"></i><span><strong>Choose a video</strong><small data-file-summary>No file selected</small></span></label>
       <label class="field conditional-block" data-conditional="source_type:path" hidden><span>Source path</span><input name="source_path" placeholder="C:\data\images"></label>
-      <label class="field conditional-block" data-conditional="source_type:url" hidden><span>Source URL</span><input name="source_url" type="url" placeholder="https://example.com/image.jpg"></label>
     </section>
     {% endif %}
 

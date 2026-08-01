@@ -61,7 +61,7 @@ def test_uploaded_models_receive_collision_safe_names(tmp_path, monkeypatch):
     assert second.read_bytes() == b"weights"
 
 
-@pytest.mark.parametrize("source_type", ["images", "video", "path", "url"])
+@pytest.mark.parametrize("source_type", ["images", "video", "path"])
 def test_prediction_source_modes_remain_supported(tmp_path, source_type):
     run_dir = tmp_path / "predict"
     run_dir.mkdir()
@@ -75,7 +75,6 @@ def test_prediction_source_modes_remain_supported(tmp_path, source_type):
         [image] if source_type == "images" else [],
         video if source_type == "video" else None,
         "local/path" if source_type == "path" else "",
-        "https://example.test/stream" if source_type == "url" else "",
     )
 
     assert source
@@ -220,7 +219,7 @@ def test_fastapi_renders_workbench_and_htmx_preview(client):
     assert page.status_code == 200
     assert "YOLOv10" in page.text
     assert 'name="video"' in page.text
-    assert 'name="source_type" value="url"' in page.text
+    assert 'name="source_type" value="url"' not in page.text
     assert 'hx-include="#run-form"' in page.text
     assert 'hx-encoding="multipart/form-data"' in page.text
     assert 'data-start-run' in page.text

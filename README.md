@@ -61,6 +61,7 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
+conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
@@ -82,6 +83,7 @@ The CUDA check must print `True` before choosing a GPU in the Workbench. Open [h
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
+conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 

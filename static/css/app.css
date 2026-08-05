@@ -55,7 +55,7 @@ a { color: inherit; text-decoration: none; }
 svg { width: 17px; height: 17px; flex: 0 0 auto; }
 [hidden] { display: none !important; }
 
-.application-shell { min-height: 100vh; }
+.application-shell { display: flex; flex-direction: column; min-height: 100vh; }
 .topbar { position: sticky; z-index: 20; top: 0; display: flex; min-height: 58px; align-items: center; gap: 26px; padding: 8px clamp(18px, 3vw, 40px); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--canvas) 94%, transparent); backdrop-filter: blur(14px); }
 .wordmark { display: inline-flex; min-width: max-content; align-items: baseline; gap: 2px; }
 .wordmark-name { font-size: 15px; font-weight: 820; }
@@ -79,7 +79,12 @@ svg { width: 17px; height: 17px; flex: 0 0 auto; }
 .language-toggle:hover { border-color: var(--border-strong); }
 .icon-button:focus-visible, .language-toggle:focus-visible, .button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: none; box-shadow: var(--focus); }
 
-main { width: min(1280px, 100%); margin: 0 auto; padding: 28px clamp(18px, 3vw, 40px) 64px; }
+main { width: min(1280px, 100%); flex: 1; margin: 0 auto; padding: 28px clamp(18px, 3vw, 40px) 40px; }
+.app-footer { width: 100%; border-top: 1px solid var(--border); background: var(--surface); }
+.app-footer-content { display: flex; width: min(1280px, 100%); align-items: center; gap: 10px; margin: 0 auto; padding: 16px clamp(18px, 3vw, 40px); color: var(--muted); font-size: 12px; }
+.app-footer a { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-weight: 650; transition: color 160ms ease; }
+.app-footer a:hover, .app-footer a:focus-visible { color: var(--accent); }
+.app-footer svg { width: 15px; height: 15px; }
 .page-heading { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 .page-heading > h1, .page-heading > div > h1 { margin: 0; font-size: 24px; line-height: 1.2; letter-spacing: 0; }
 .page-eyebrow { color: var(--muted); font-size: 12px; font-weight: 650; }
@@ -423,7 +428,8 @@ body.is-viewer-open { overflow: hidden; }
   .primary-nav { order: 3; width: 100%; }
   .primary-nav a { flex: 1; justify-content: center; }
   .runtime-status { display: none; }
-  main { padding: 22px 14px 44px; }
+  main { padding: 22px 14px 36px; }
+  .app-footer-content { padding: 14px; }
   .page-heading { min-height: 44px; margin-bottom: 14px; }
   .page-heading h1 { font-size: 21px; }
   .queue-note { display: none; }

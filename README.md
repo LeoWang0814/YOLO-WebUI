@@ -52,6 +52,9 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 
 ## Quick start
 
+> [!NOTE]
+> Dependency files do not force a download source. Configure your preferred pip mirror before the install command when needed.
+
 ### NVIDIA GPU
 
 ```bash

@@ -58,6 +58,7 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
+conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
@@ -76,6 +77,7 @@ python app.py
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
+conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 

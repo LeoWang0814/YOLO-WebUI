@@ -11,7 +11,7 @@ import app
 from core import workflows
 from core.runner import RunConflictError, RunJob, RunManager
 from web.forms import expert_groups, expert_values
-from web.docs import DOC_NAVIGATION, docs_slugs, parameter_docs
+from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_slugs, parameter_docs
 
 
 def test_generated_run_dirs_are_unique(tmp_path, monkeypatch):
@@ -270,6 +270,19 @@ def test_docs_routes_navigation_and_shared_reference_coverage(client):
     configuration = client.get("/docs/configuration")
     assert "Workbench-managed fields" in configuration.text
     assert "Advanced settings" in configuration.text
+
+
+def test_every_visible_advanced_parameter_has_a_specific_reference_definition():
+    for mode in ("train", "predict"):
+        visible_keys = [key for _, fields in expert_groups(mode) for key, _ in fields]
+        documented = parameter_docs(mode)
+
+        assert [item["key"] for item in documented] == visible_keys
+        assert all(item["description"] == PARAMETER_OVERRIDES[item["key"]] for item in documented)
+        assert all(
+            item["description"] != f"Ultralytics {item['key'].replace('_', ' ')} setting for {mode} mode."
+            for item in documented
+        )
 
 
 def test_dataset_preparation_hides_internal_detection_evidence(monkeypatch, client):

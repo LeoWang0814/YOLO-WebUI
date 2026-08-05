@@ -55,6 +55,9 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 
 ## Quick start
 
+> [!NOTE]
+> Dependency files do not force a download source. Configure your preferred pip mirror before the install command when needed.
+
 ### NVIDIA GPU · CUDA 11.8 (Windows or Linux)
 
 ```bash
@@ -74,8 +77,6 @@ python app.py
 
 The CUDA check must print `True` before choosing a GPU in the Workbench. Open [http://127.0.0.1:7860](http://127.0.0.1:7860) after launch.
 
-> [!NOTE]
-> Dependency files do not force a download source. Configure your preferred pip mirror before the install command when needed. For CUDA 11.8, use a mirror that provides the matching PyTorch CUDA wheel, or install that wheel from your chosen source first.
 
 ### CPU only (Windows, macOS, or Linux)
 

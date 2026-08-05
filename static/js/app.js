@@ -3,6 +3,7 @@
   const root = document.documentElement;
   let feedbackTimer;
   const pendingLogScroll = new Map();
+  const t = (value) => window.WorkbenchI18n?.t(value) || value;
   const actualTheme = (preference) => preference === "system"
     ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
     : preference;
@@ -29,7 +30,7 @@
         });
         chart.dataset.plotReady = "true";
       } catch (_) {
-        chart.textContent = "Unable to render metrics.";
+        chart.textContent = t("Unable to render metrics.");
       }
     });
   };
@@ -42,8 +43,8 @@
     const toggle = document.querySelector("[data-theme-toggle]");
     if (!toggle) return;
     const nextTheme = theme === "dark" ? "light" : "dark";
-    toggle.setAttribute("aria-label", `Switch to ${nextTheme} theme`);
-    toggle.setAttribute("title", `Switch to ${nextTheme} theme`);
+    toggle.setAttribute("aria-label", t(`Switch to ${nextTheme} theme`));
+    toggle.setAttribute("title", t(`Switch to ${nextTheme} theme`));
     toggle.innerHTML = `<i data-lucide="${theme === "dark" ? "sun" : "moon"}"></i>`;
     initializeIcons();
   };
@@ -81,9 +82,9 @@
       input.addEventListener("change", () => {
         const summary = input.closest(".upload-drop")?.querySelector("[data-file-summary]");
         if (!summary) return;
-        if (!input.files?.length) summary.textContent = input.multiple ? "No files selected" : "No file selected";
+        if (!input.files?.length) summary.textContent = t(input.multiple ? "No files selected" : "No file selected");
         else if (input.files.length === 1) summary.textContent = input.files[0].name;
-        else summary.textContent = `${input.files.length} files selected`;
+        else summary.textContent = t(`${input.files.length} files selected`);
       });
     });
   };
@@ -98,8 +99,8 @@
     if (!status || !label) return;
     status.classList.toggle("is-paused", !following);
     label.textContent = following
-      ? (section.hasAttribute("hx-get") ? "Following output" : "At latest output")
-      : "Auto-follow paused";
+      ? t(section.hasAttribute("hx-get") ? "Following output" : "At latest output")
+      : t("Auto-follow paused");
   };
 
   const captureLogScroll = (target) => {
@@ -203,7 +204,7 @@
     clampViewerOffset();
     media.style.transform = `translate3d(${viewerState.offsetX}px, ${viewerState.offsetY}px, 0) scale(${viewerState.scale})`;
     const caption = viewer.querySelector("[data-viewer-caption]");
-    if (caption) caption.textContent = viewerState.scale === 1 ? "Fit to view" : `${Math.round(viewerState.scale * 100)}%`;
+    if (caption) caption.textContent = viewerState.scale === 1 ? t("Fit to view") : `${Math.round(viewerState.scale * 100)}%`;
     updateViewerInteractionState();
   };
 
@@ -304,7 +305,7 @@
       video.src = src;
       video.load();
     }
-    if (title) title.textContent = trigger.dataset.mediaLabel || (kind === "video" ? "Video" : "Image");
+    if (title) title.textContent = trigger.dataset.mediaLabel || t(kind === "video" ? "Video" : "Image");
     if (original) original.href = src;
     viewer.hidden = false;
     viewer.setAttribute("aria-hidden", "false");
@@ -394,7 +395,7 @@
           initializeScope();
         } catch (_) {
           const status = element.querySelector(".dataset-progress-copy span");
-          if (status) status.textContent = "Reconnecting to dataset preparation status…";
+          if (status) status.textContent = t("Reconnecting to dataset preparation status…");
           window.setTimeout(poll, 900);
         }
       };
@@ -424,9 +425,11 @@
       const resultId = (position) => `docs-search-result-${position}`;
 
       const scoreEntry = (entry, query, terms) => {
-        const title = entry.title.toLowerCase();
-        const pageTitle = entry.page_title.toLowerCase();
-        const searchable = entry.terms.toLowerCase();
+        const localizedTitle = t(entry.title);
+        const localizedPageTitle = t(entry.page_title);
+        const title = localizedTitle.toLowerCase();
+        const pageTitle = localizedPageTitle.toLowerCase();
+        const searchable = `${entry.terms} ${localizedTitle} ${localizedPageTitle}`.toLowerCase();
         if (!terms.every((term) => searchable.includes(term))) return -1;
 
         let score = 100;
@@ -475,7 +478,9 @@
         if (!matches.length) {
           const empty = document.createElement("p");
           empty.className = "docs-search-empty";
-          empty.textContent = `No documentation matches “${input.value.trim()}”.`;
+          empty.textContent = window.WorkbenchI18n?.isChinese()
+            ? `没有与“${input.value.trim()}”匹配的文档。`
+            : `No documentation matches “${input.value.trim()}”.`;
           results.append(empty);
           return;
         }
@@ -490,9 +495,9 @@
           result.setAttribute("aria-selected", "false");
 
           const context = document.createElement("small");
-          context.textContent = entry.kind === "Page" ? "Page" : entry.page_title;
+          context.textContent = entry.kind === "Page" ? t("Page") : t(entry.page_title);
           const title = document.createElement("strong");
-          title.textContent = entry.title;
+          title.textContent = t(entry.title);
           result.append(context, title);
           result.addEventListener("pointermove", () => setActiveResult(position));
           result.addEventListener("focus", () => setActiveResult(position));
@@ -525,6 +530,7 @@
   };
 
   const initializeScope = (scope = document) => {
+    window.WorkbenchI18n?.apply(scope);
     initializeIcons();
     refreshConditionals(scope);
     initializeSearch(scope);
@@ -538,6 +544,7 @@
   };
 
   document.addEventListener("DOMContentLoaded", () => {
+    window.WorkbenchI18n?.initialize();
     applyTheme(localStorage.getItem(preferenceKey) || "system");
     initializeScope();
 

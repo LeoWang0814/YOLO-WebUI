@@ -232,6 +232,8 @@ def test_fastapi_renders_workbench_and_htmx_preview(client):
     assert 'class="command-shell"' not in page.text
     assert 'class="theme-popover"' not in page.text
     assert 'id="media-viewer"' in page.text
+    assert 'data-language-toggle' in page.text
+    assert '/static/js/i18n.js?v=' in page.text
     train = client.get("/?operation=train")
     assert 'name="dataset_path"' in train.text
     assert "/docs/datasets#supported-formats" in train.text
@@ -240,6 +242,16 @@ def test_fastapi_renders_workbench_and_htmx_preview(client):
     assert 'hx-indicator="#dataset-progress"' in train.text
     assert 'hx-trigger="input changed delay:700ms, blur"' not in train.text
     assert 'href="/?operation=train" aria-label="YOLOv10 Workbench home"' not in page.text
+
+
+def test_language_switching_assets_and_copy_are_available(client):
+    script = client.get("/static/js/i18n.js")
+
+    assert script.status_code == 200
+    assert "yolov10-workbench.language" in script.text
+    assert '"训练参数"' in script.text
+    assert '"训练轮次（Epochs）"' in script.text
+    assert "data-language-toggle" in client.get("/?operation=train").text
 
 
 def test_docs_are_english_and_dataset_help_is_available(client):

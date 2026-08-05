@@ -49,7 +49,11 @@ app = FastAPI(title="YOLOv10 Workbench", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 run_manager = RunManager()
 dataset_manager = DatasetPreparationManager()
-ASSET_VERSION = str(max((ROOT / "static" / "css" / "app.css").stat().st_mtime_ns, (ROOT / "static" / "js" / "app.js").stat().st_mtime_ns))
+ASSET_VERSION = str(max(
+    (ROOT / "static" / "css" / "app.css").stat().st_mtime_ns,
+    (ROOT / "static" / "js" / "app.js").stat().st_mtime_ns,
+    (ROOT / "static" / "js" / "i18n.js").stat().st_mtime_ns,
+))
 
 
 def _template(request: Request, name: str, *, status_code: int = 200, headers: Optional[Dict[str, str]] = None, **context: Any):

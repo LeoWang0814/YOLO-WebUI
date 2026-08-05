@@ -13,12 +13,17 @@
         : preference;
       document.documentElement.dataset.theme = theme;
       document.documentElement.dataset.themePreference = preference;
+      const savedLanguage = localStorage.getItem("yolov10-workbench.language");
+      const language = savedLanguage || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
+      document.documentElement.dataset.language = language;
+      document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     })();
   </script>
   <link rel="stylesheet" href="/static/css/app.css?v={{ asset_version }}">
   <script src="/assets/plotly.min.js"></script>
   <script defer src="/static/vendor/htmx.min.js"></script>
   <script defer src="/static/vendor/lucide.min.js"></script>
+  <script defer src="/static/js/i18n.js?v={{ asset_version }}"></script>
   <script defer src="/static/js/app.js?v={{ asset_version }}"></script>
 </head>
 <body>
@@ -38,6 +43,7 @@
         <div class="theme-menu" aria-label="Theme">
           <button class="icon-button" type="button" data-theme-toggle aria-label="Switch theme" title="Switch theme"><i data-lucide="sun-moon"></i></button>
         </div>
+        <button class="language-toggle" type="button" data-language-toggle aria-label="Switch language" title="Switch language"><span data-language-zh>中</span><i>/</i><span data-language-en>En</span></button>
       </div>
     </header>
     <main>{% block content %}{% endblock %}</main>

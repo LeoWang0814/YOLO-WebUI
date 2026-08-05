@@ -8,7 +8,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/Python-3.10-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10">
-  <img src="https://img.shields.io/badge/PyTorch-2.0.1-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.0.1">
+  <img src="https://img.shields.io/badge/PyTorch-2.7.1-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.7.1">
   <img src="https://img.shields.io/badge/FastAPI-local%20runtime-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI local runtime">
   <img src="https://img.shields.io/badge/YOLO-Detect-111827?style=flat-square" alt="YOLO Detect">
   <img src="https://img.shields.io/badge/License-AGPL--3.0-7A5195?style=flat-square" alt="AGPL-3.0 license">
@@ -48,42 +48,34 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 - Git
 - [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) (Miniconda or Anaconda)
 - Windows, macOS, or Linux
-- Optional: NVIDIA GPU with a driver compatible with CUDA 11.8
-
-> [!IMPORTANT]
-> Choose one installation path below. Use CUDA 11.8 first when the target Windows or Linux machine has a compatible NVIDIA driver; use CPU on machines without CUDA support, including macOS.
+- Optional: NVIDIA GPU
 
 ## Quick start
 
-### NVIDIA GPU · CUDA 11.8 (Windows or Linux)
+### NVIDIA GPU
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
-pip install -r requirements-cuda118.txt
+pip install -r requirements.txt
 pip install -e .
 
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-The CUDA check must print `True` before choosing a GPU in the Workbench. Open [http://127.0.0.1:7860](http://127.0.0.1:7860) after launch.
+The check should show a CUDA version, `True`, and the detected GPU count. Then open [http://127.0.0.1:7860](http://127.0.0.1:7860).
 
-> [!NOTE]
-> Dependency files do not force a download source. Configure your preferred pip mirror before the install command when needed. For CUDA 11.8, use a mirror that provides the matching PyTorch CUDA wheel, or install that wheel from your chosen source first.
-
-### CPU only (Windows, macOS, or Linux)
+### CPU
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 

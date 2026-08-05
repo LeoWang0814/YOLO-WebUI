@@ -8,7 +8,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/Python-3.10-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10">
-  <img src="https://img.shields.io/badge/PyTorch-2.0.1-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.0.1">
+  <img src="https://img.shields.io/badge/PyTorch-2.7.1-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.7.1">
   <img src="https://img.shields.io/badge/FastAPI-local%20runtime-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI 本地运行时">
   <img src="https://img.shields.io/badge/YOLO-Detect-111827?style=flat-square" alt="YOLO Detect">
   <img src="https://img.shields.io/badge/License-AGPL--3.0-7A5195?style=flat-square" alt="AGPL-3.0 license">
@@ -48,14 +48,11 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 - Git
 - [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)（Miniconda 或 Anaconda）
 - Windows、macOS 或 Linux
-- 可选：驱动兼容 CUDA 11.8 的 NVIDIA GPU
-
-> [!IMPORTANT]
-> 请从下方两条安装路径中任选一条。对于具备兼容 NVIDIA 驱动的 Windows 或 Linux 机器，请优先使用 CUDA 11.8；没有 CUDA 支持的机器（包括 macOS）请使用 CPU。
+- 可选：NVIDIA GPU
 
 ## 快速开始
 
-### NVIDIA GPU · CUDA 11.8（Windows 或 Linux）
+### NVIDIA GPU
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
@@ -64,19 +61,16 @@ cd yolov10-workbench
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
-pip install -r requirements-cuda118.txt
+pip install -r requirements.txt
 pip install -e .
 
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-CUDA 检查必须输出 `True`，再在 Workbench 中选择 GPU。启动后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
+检查结果应显示 CUDA 版本、`True` 和识别到的 GPU 数量。随后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
 
-> [!NOTE]
-> 依赖文件不会强制指定下载源。需要加速时，请在执行安装命令前配置所选 pip 镜像。对于 CUDA 11.8，请使用提供相应 PyTorch CUDA wheel 的镜像，或先从你选择的来源安装该 wheel。
-
-### 仅 CPU（Windows、macOS 或 Linux）
+### CPU
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench

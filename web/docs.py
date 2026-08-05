@@ -45,6 +45,60 @@ PAGE_META: Dict[str, Dict[str, Any]] = {
 }
 
 
+# Search aliases deliberately live beside the page map so a new Docs section has a
+# clear, maintained place to define the vocabulary users are likely to search for.
+DOC_SECTION_KEYWORDS: Dict[tuple[str, str], List[str]] = {
+    ("getting-started", "requirements"): ["installation", "python", "requirements", "local", "self-hosted"],
+    ("getting-started", "launch"): ["start", "command", "uvicorn", "host", "port", "environment variables"],
+    ("getting-started", "first-training"): ["dataset", "inspect", "ready", "epochs", "weights"],
+    ("getting-started", "first-prediction"): ["images", "video", "path", "confidence", "iou"],
+    ("overview", "what-it-is"): ["local", "ultralytics", "cli", "detect", "workflow"],
+    ("overview", "workflow"): ["command", "model", "artifacts", "logs", "lifecycle"],
+    ("overview", "limits"): ["unsupported", "obb", "segmentation", "url", "concurrent"],
+    ("train", "before-starting"): ["dataset", "ready", "model", "single run"],
+    ("train", "train-form"): ["epochs", "batch", "workers", "device", "advanced settings"],
+    ("train", "execution"): ["progress", "stop", "logs", "download", "queue"],
+    ("train", "outputs"): ["weights", "metrics", "results", "run directory"],
+    ("datasets", "from-zero"): ["folder", "inspect", "convert", "yolo", "coco", "voc"],
+    ("datasets", "progress"): ["checking", "verifying", "preparing", "percentage", "inspection"],
+    ("datasets", "supported-formats"): ["coco", "voc", "createml", "csv", "yolo", "format conversion"],
+    ("datasets", "lossless"): ["obb", "segmentation", "classification", "bounding boxes", "incompatible"],
+    ("datasets", "cache"): ["prepared dataset", "fingerprint", "manifest", "data.yaml", "labels"],
+    ("datasets", "dataset-blockers"): ["ambiguous", "missing image", "invalid labels", "splits", "errors"],
+    ("models", "pretrained"): ["catalog", "weights", "cache", "release", "model"],
+    ("models", "local-models"): ["upload", "checkpoint", ".pt", "filename", "path"],
+    ("models", "download"): ["checksum", "sha256", "retry", "partial download", "verification"],
+    ("models", "errors"): ["download failed", "checksum mismatch", "invalid model", "retry"],
+    ("predict", "sources"): ["images", "video", "local path", "uploads", "url unsupported"],
+    ("predict", "prediction-settings"): ["confidence", "iou", "image size", "device", "nms"],
+    ("predict", "run-prediction"): ["run", "progress", "output", "artifacts"],
+    ("predict", "viewer"): ["zoom", "pan", "open original", "mp4", "media"],
+    ("runs", "run-list"): ["search", "filter", "train", "predict", "updated"],
+    ("runs", "run-details"): ["command", "logs", "metadata", "metrics", "results"],
+    ("runs", "states"): ["queued", "running", "completed", "failed", "stopped", "disconnected"],
+    ("runs", "artifacts"): ["args.json", "command.txt", "run.log", "weights", "media"],
+    ("configuration", "primary-controls"): ["epochs", "batch", "workers", "device", "confidence", "iou"],
+    ("configuration", "train-advanced"): ["ultralytics", "optimizer", "augmentation", "hyperparameters"],
+    ("configuration", "predict-advanced"): ["output", "video stride", "class filter", "nms"],
+    ("configuration", "managed"): ["task", "mode", "data", "source", "model", "project"],
+    ("runtime", "device-selection"): ["cpu", "cuda", "gpu", "auto", "multiple gpus"],
+    ("runtime", "performance"): ["batch", "workers", "amp", "cache", "memory", "throughput"],
+    ("runtime", "queue"): ["single active run", "conflict", "concurrent", "training", "prediction"],
+    ("runtime", "download-progress"): ["model download", "percentage", "checksum", "verified weights"],
+    ("storage-and-privacy", "locations"): ["runs", "weights", "models", "prepared datasets", "uploads"],
+    ("storage-and-privacy", "data-lifecycle"): ["source", "immutable", "staged", "cache", "artifacts"],
+    ("storage-and-privacy", "privacy"): ["local-only", "network", "authentication", "remote urls"],
+    ("storage-and-privacy", "retention"): ["cleanup", "delete", "persist", "storage", "cache"],
+    ("troubleshooting", "dataset-errors"): ["blocked", "ambiguous", "missing image", "invalid box", "empty split"],
+    ("troubleshooting", "model-errors"): ["download", "checksum", "upload", ".pt", "path"],
+    ("troubleshooting", "run-errors"): ["gpu", "cuda", "run name", "failed", "stopped", "disconnected"],
+    ("troubleshooting", "output-errors"): ["artifacts", "video", "media playback", "logs", "results"],
+    ("glossary", "glossary"): ["artifact", "cache", "detect", "obb", "split", "source"],
+    ("glossary", "supported"): ["training", "prediction", "dataset", "local", "models"],
+    ("glossary", "not-supported"): ["urls", "obb", "segmentation", "pose", "classification", "cloud"],
+}
+
+
 PRIMARY_CONTROLS = [
     ("Train", "Dataset folder", "Local directory inspected into a prepared YOLO Detect dataset before a run can start."),
     ("Train", "Model", "Select a verified pretrained model, a local .pt path, or upload a .pt file."),
@@ -183,3 +237,35 @@ def docs_page(slug: str) -> Dict[str, Any]:
 
 def docs_slugs() -> set[str]:
     return set(PAGE_META)
+
+
+def _docs_url(slug: str) -> str:
+    return "/docs" if slug == "getting-started" else f"/docs/{slug}"
+
+
+def docs_search_index() -> List[Dict[str, str]]:
+    """Build the small, client-side Docs index from authoritative page metadata."""
+    navigation_titles = {
+        page["slug"]: page["title"]
+        for section in DOC_NAVIGATION
+        for page in section["pages"]
+    }
+    entries: List[Dict[str, str]] = []
+    for slug, meta in PAGE_META.items():
+        page_title = navigation_titles[slug]
+        entries.append({
+            "kind": "Page",
+            "title": page_title,
+            "page_title": page_title,
+            "url": _docs_url(slug),
+            "terms": " ".join((page_title, meta["title"], meta["summary"])),
+        })
+        for anchor, title in meta["toc"]:
+            entries.append({
+                "kind": "Section",
+                "title": title,
+                "page_title": page_title,
+                "url": f"{_docs_url(slug)}#{anchor}",
+                "terms": " ".join((page_title, meta["title"], title, *DOC_SECTION_KEYWORDS[(slug, anchor)])),
+            })
+    return entries

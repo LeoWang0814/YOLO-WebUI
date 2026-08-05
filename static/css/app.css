@@ -309,8 +309,16 @@ th { position: sticky; top: 0; background: var(--surface-subtle); color: var(--m
 .docs-shell { display: grid; grid-template-columns: 220px minmax(0, 760px) 165px; justify-content: center; gap: 38px; }
 .docs-nav, .docs-toc { position: sticky; top: 82px; align-self: start; display: grid; gap: 3px; }
 .docs-search { position: relative; display: block; margin-bottom: 10px; }
+.docs-search > label { display: block; }
 .docs-search svg { position: absolute; top: 10px; left: 9px; width: 15px; height: 15px; color: var(--faint); }
 .docs-search input { min-height: 35px; padding-left: 31px; font-size: 11px; }
+.docs-search-results { position: absolute; z-index: 15; top: calc(100% + 6px); right: 0; left: 0; display: grid; max-height: min(420px, calc(100vh - 145px)); overflow: auto; padding: 4px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); }
+.docs-search-results[hidden] { display: none; }
+.docs-search-result { display: grid; gap: 2px; padding: 8px 9px; border-radius: 5px; color: var(--text); }
+.docs-search-result small { color: var(--faint); font-size: 10px; font-weight: 700; }
+.docs-search-result strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.docs-search-result:hover, .docs-search-result.is-active, .docs-search-result:focus-visible { background: var(--surface-hover); color: var(--text); outline: 2px solid var(--accent); outline-offset: -2px; }
+.docs-search-empty { margin: 0; padding: 9px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .docs-nav-group { display: grid; gap: 3px; }
 .docs-nav-group > span, .docs-toc strong { margin: 14px 0 4px; color: var(--faint); font-size: 10px; font-weight: 760; letter-spacing: .07em; }
 .docs-nav a { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border-radius: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }

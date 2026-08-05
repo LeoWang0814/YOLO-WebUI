@@ -11,7 +11,7 @@ import app
 from core import workflows
 from core.runner import RunConflictError, RunJob, RunManager
 from web.forms import expert_groups, expert_values
-from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_slugs, parameter_docs
+from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_page, docs_search_index, docs_slugs, parameter_docs
 
 
 def test_generated_run_dirs_are_unique(tmp_path, monkeypatch):
@@ -270,6 +270,31 @@ def test_docs_routes_navigation_and_shared_reference_coverage(client):
     configuration = client.get("/docs/configuration")
     assert "Workbench-managed fields" in configuration.text
     assert "Advanced settings" in configuration.text
+
+
+def test_docs_global_search_index_covers_each_page_and_section(client):
+    index = docs_search_index()
+    page_entries = [entry for entry in index if entry["kind"] == "Page"]
+    section_entries = [entry for entry in index if entry["kind"] == "Section"]
+    expected_sections = {
+        f"{'/docs' if slug == 'getting-started' else f'/docs/{slug}'}#{anchor}"
+        for slug in docs_slugs()
+        for anchor, _ in docs_page(slug)["toc"]
+    }
+
+    assert {entry["url"] for entry in page_entries} == {
+        "/docs" if slug == "getting-started" else f"/docs/{slug}"
+        for slug in docs_slugs()
+    }
+    assert {entry["url"] for entry in section_entries} == expected_sections
+    assert len(section_entries) == len(expected_sections)
+    assert next(entry for entry in section_entries if entry["url"] == "/docs/datasets#cache")["title"] == "Cache and output"
+    assert "checksum" in next(entry for entry in section_entries if entry["url"] == "/docs/models#download")["terms"]
+
+    response = client.get("/docs/datasets")
+    assert 'data-doc-search-index' in response.text
+    assert 'role="combobox"' in response.text
+    assert 'role="listbox"' in response.text
 
 
 def test_every_visible_advanced_parameter_has_a_specific_reference_definition():

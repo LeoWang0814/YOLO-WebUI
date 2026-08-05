@@ -40,7 +40,7 @@ from core.workflows import (
     save_uploaded_model,
     stage_upload,
 )
-from web.docs import DOC_NAVIGATION, PRIMARY_CONTROLS, docs_page, docs_slugs, parameter_docs
+from web.docs import DOC_NAVIGATION, PRIMARY_CONTROLS, docs_page, docs_search_index, docs_slugs, parameter_docs
 from web.forms import expert_groups, expert_values, form_control, form_list, integer, number, required_text
 
 
@@ -315,6 +315,7 @@ def docs(request: Request, page: str = "getting-started"):
         current_page="docs",
         docs_page=docs_page(page),
         docs_navigation=DOC_NAVIGATION,
+        docs_search_index=docs_search_index(),
         dataset_formats=FORMAT_CATALOG,
         primary_controls=PRIMARY_CONTROLS,
         train_parameters=parameter_docs("train"),

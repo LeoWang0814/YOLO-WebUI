@@ -3,9 +3,13 @@
 {% block content %}
 <section class="docs-shell" data-docs-shell>
   <aside class="docs-nav" aria-label="Documentation navigation">
-    <label class="docs-search"><i data-lucide="search"></i><input type="search" data-doc-search placeholder="Search documentation" aria-label="Search documentation"></label>
+    <div class="docs-search" data-doc-search-root>
+      <label><i data-lucide="search"></i><input type="search" data-doc-search placeholder="Search documentation" aria-label="Search documentation" role="combobox" aria-autocomplete="list" aria-controls="docs-search-results" aria-expanded="false" autocomplete="off"></label>
+      <div id="docs-search-results" class="docs-search-results" data-doc-search-results role="listbox" aria-label="Documentation search results" hidden></div>
+      <script type="application/json" data-doc-search-index>{{ docs_search_index | tojson }}</script>
+    </div>
     {% for section in docs_navigation %}
-      <div class="docs-nav-group" data-doc-nav-group><span>{{ section.label }}</span>{% for item in section.pages %}<a href="/docs/{{ item.slug if item.slug != 'getting-started' else '' }}" data-doc-nav-item data-doc-search-text="{{ item.title | lower }}" {% if docs_page.slug == item.slug %}aria-current="page"{% endif %}><i data-lucide="{{ item.icon }}"></i>{{ item.title }}</a>{% endfor %}</div>
+      <div class="docs-nav-group"><span>{{ section.label }}</span>{% for item in section.pages %}<a href="/docs/{{ item.slug if item.slug != 'getting-started' else '' }}" data-doc-nav-item {% if docs_page.slug == item.slug %}aria-current="page"{% endif %}><i data-lucide="{{ item.icon }}"></i>{{ item.title }}</a>{% endfor %}</div>
     {% endfor %}
   </aside>
   <article class="docs-content" data-doc-content>

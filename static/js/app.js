@@ -403,21 +403,123 @@
   };
 
   const initializeDocsSearch = (scope = document) => {
-    scope.querySelectorAll("[data-doc-search]").forEach((input) => {
-      if (input.dataset.bound) return;
-      input.dataset.bound = "true";
-      input.addEventListener("input", () => {
+    scope.querySelectorAll("[data-doc-search-root]").forEach((root) => {
+      if (root.dataset.bound) return;
+      root.dataset.bound = "true";
+
+      const input = root.querySelector("[data-doc-search]");
+      const results = root.querySelector("[data-doc-search-results]");
+      const indexNode = root.querySelector("[data-doc-search-index]");
+      if (!input || !results || !indexNode) return;
+
+      let index = [];
+      try {
+        index = JSON.parse(indexNode.textContent || "[]");
+      } catch (_) {
+        return;
+      }
+
+      let matches = [];
+      let activeIndex = -1;
+      const resultId = (position) => `docs-search-result-${position}`;
+
+      const scoreEntry = (entry, query, terms) => {
+        const title = entry.title.toLowerCase();
+        const pageTitle = entry.page_title.toLowerCase();
+        const searchable = entry.terms.toLowerCase();
+        if (!terms.every((term) => searchable.includes(term))) return -1;
+
+        let score = 100;
+        if (title === query) score += 900;
+        else if (title.startsWith(query)) score += 700;
+        else if (title.includes(query)) score += 500;
+        if (pageTitle === query) score += 300;
+        else if (pageTitle.startsWith(query)) score += 180;
+        if (searchable.startsWith(query)) score += 80;
+        return score;
+      };
+
+      const setActiveResult = (position) => {
+        activeIndex = position;
+        results.querySelectorAll("[data-doc-search-result]").forEach((result, indexPosition) => {
+          const selected = indexPosition === activeIndex;
+          result.classList.toggle("is-active", selected);
+          result.setAttribute("aria-selected", String(selected));
+        });
+        if (activeIndex >= 0) input.setAttribute("aria-activedescendant", resultId(activeIndex));
+        else input.removeAttribute("aria-activedescendant");
+      };
+
+      const renderResults = () => {
         const query = input.value.trim().toLowerCase();
-        document.querySelectorAll("[data-doc-nav-item]").forEach((item) => {
-          item.hidden = Boolean(query && !item.dataset.docSearchText.includes(query));
+        results.replaceChildren();
+        activeIndex = -1;
+        matches = [];
+        input.setAttribute("aria-expanded", "false");
+        input.removeAttribute("aria-activedescendant");
+        if (!query) {
+          results.hidden = true;
+          return;
+        }
+
+        const terms = query.split(/\s+/).filter(Boolean);
+        matches = index
+          .map((entry) => ({ entry, score: scoreEntry(entry, query, terms) }))
+          .filter(({ score }) => score >= 0)
+          .sort((left, right) => right.score - left.score || left.entry.kind.localeCompare(right.entry.kind) || left.entry.title.localeCompare(right.entry.title))
+          .slice(0, 8)
+          .map(({ entry }) => entry);
+
+        results.hidden = false;
+        input.setAttribute("aria-expanded", "true");
+        if (!matches.length) {
+          const empty = document.createElement("p");
+          empty.className = "docs-search-empty";
+          empty.textContent = `No documentation matches “${input.value.trim()}”.`;
+          results.append(empty);
+          return;
+        }
+
+        matches.forEach((entry, position) => {
+          const result = document.createElement("a");
+          result.id = resultId(position);
+          result.href = entry.url;
+          result.className = "docs-search-result";
+          result.dataset.docSearchResult = "true";
+          result.setAttribute("role", "option");
+          result.setAttribute("aria-selected", "false");
+
+          const context = document.createElement("small");
+          context.textContent = entry.kind === "Page" ? "Page" : entry.page_title;
+          const title = document.createElement("strong");
+          title.textContent = entry.title;
+          result.append(context, title);
+          result.addEventListener("pointermove", () => setActiveResult(position));
+          result.addEventListener("focus", () => setActiveResult(position));
+          results.append(result);
         });
-        document.querySelectorAll("[data-doc-nav-group]").forEach((group) => {
-          const links = [...group.querySelectorAll("[data-doc-nav-item]")];
-          group.hidden = Boolean(query && links.length && links.every((link) => link.hidden));
-        });
-        document.querySelectorAll("[data-doc-section]").forEach((section) => {
-          section.hidden = Boolean(query && !section.dataset.docSearchText.includes(query));
-        });
+      };
+
+      input.addEventListener("input", renderResults);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          if (!input.value) return;
+          event.preventDefault();
+          input.value = "";
+          renderResults();
+          return;
+        }
+        if (!matches.length) return;
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          setActiveResult((activeIndex + direction + matches.length) % matches.length);
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          window.location.assign(matches[activeIndex >= 0 ? activeIndex : 0].url);
+        }
       });
     });
   };

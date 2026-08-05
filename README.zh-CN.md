@@ -51,7 +51,7 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 - 可选：驱动兼容 CUDA 11.8 的 NVIDIA GPU
 
 > [!IMPORTANT]
-> 对于具备兼容 NVIDIA 驱动的 Windows 或 Linux 机器，请优先使用 CUDA 11.8 环境。没有 CUDA 支持的机器（包括 macOS）请使用 CPU 环境。
+> 请从下方两条安装路径中任选一条。对于具备兼容 NVIDIA 驱动的 Windows 或 Linux 机器，请优先使用 CUDA 11.8；没有 CUDA 支持的机器（包括 macOS）请使用 CPU。
 
 ## 快速开始
 
@@ -61,8 +61,11 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-conda env create -f environment-cuda118.yml
-conda activate yolo-webui-cuda118
+conda create -n yolov10 python=3.10
+conda activate yolov10
+
+pip install -r requirements-cuda118.txt
+pip install -e .
 
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python app.py
@@ -76,8 +79,11 @@ CUDA 检查必须输出 `True`，再在 Workbench 中选择 GPU。启动后打�
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-conda env create -f environment-cpu.yml
-conda activate yolo-webui-cpu
+conda create -n yolov10 python=3.10
+conda activate yolov10
+
+pip install -r requirements.txt
+pip install -e .
 
 python app.py
 ```

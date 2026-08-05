@@ -51,7 +51,7 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 - Optional: NVIDIA GPU with a driver compatible with CUDA 11.8
 
 > [!IMPORTANT]
-> Use the CUDA 11.8 environment first when the target Windows or Linux machine has a compatible NVIDIA driver. Use the CPU environment on machines without CUDA support, including macOS.
+> Choose one installation path below. Use CUDA 11.8 first when the target Windows or Linux machine has a compatible NVIDIA driver; use CPU on machines without CUDA support, including macOS.
 
 ## Quick start
 
@@ -61,8 +61,11 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-conda env create -f environment-cuda118.yml
-conda activate yolo-webui-cuda118
+conda create -n yolov10 python=3.10
+conda activate yolov10
+
+pip install -r requirements-cuda118.txt
+pip install -e .
 
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python app.py
@@ -76,8 +79,11 @@ The CUDA check must print `True` before choosing a GPU in the Workbench. Open [h
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-conda env create -f environment-cpu.yml
-conda activate yolo-webui-cpu
+conda create -n yolov10 python=3.10
+conda activate yolov10
+
+pip install -r requirements.txt
+pip install -e .
 
 python app.py
 ```

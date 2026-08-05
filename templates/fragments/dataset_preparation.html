@@ -1,0 +1,12 @@
+<div id="dataset-validation" class="dataset-validation is-{{ dataset.status }}" {% if dataset.status == 'ready' %}data-dataset-ready{% endif %}>
+  {% if dataset.status == 'ready' %}
+    <input type="hidden" name="data_path" value="{{ dataset.prepared_path }}">
+    <div class="dataset-summary"><i data-lucide="circle-check-big"></i><div><strong>Ready for YOLOv10 Detect</strong><span>{{ dataset.format | replace('-', ' ') | title }} · {{ dataset.images }} images · {{ dataset.objects }} objects · {{ dataset.classes | length }} classes</span></div></div>
+    <div class="dataset-stages"><span class="is-complete">Inspect</span><span class="is-complete">Verify</span><span class="is-complete">Prepare</span></div>
+    <details class="dataset-details"><summary>View dataset summary</summary><div class="dataset-splits">{% for split, count in dataset.splits.items() %}<span><strong>{{ split | title }}</strong>{{ count }} images</span>{% endfor %}</div><a href="/docs/datasets#supported-formats" target="_blank" rel="noopener">Learn how this format is detected and converted <i data-lucide="arrow-up-right"></i></a></details>
+  {% elif dataset.status == 'blocked' %}
+    <i data-lucide="circle-alert"></i><div><strong>Dataset preparation is blocked</strong><span>{{ dataset.message }}</span><a href="/docs/datasets#incompatible-formats">Read supported formats and conversion rules <i data-lucide="arrow-up-right"></i></a></div>
+  {% else %}
+    <i data-lucide="folder-search-2"></i><span>{{ dataset.message }}</span>
+  {% endif %}
+</div>

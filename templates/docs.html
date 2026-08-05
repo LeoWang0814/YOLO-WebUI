@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}{{ docs_page.title }} - Documentation - YOLOv10 Workbench{% endblock %}
+{% block content %}
+<section class="docs-shell" data-docs-shell>
+  <aside class="docs-nav" aria-label="Documentation navigation">
+    <label class="docs-search"><i data-lucide="search"></i><input type="search" data-doc-search placeholder="Search documentation" aria-label="Search documentation"></label>
+    {% for section in docs_navigation %}
+      <div class="docs-nav-group" data-doc-nav-group><span>{{ section.label }}</span>{% for item in section.pages %}<a href="/docs/{{ item.slug if item.slug != 'getting-started' else '' }}" data-doc-nav-item data-doc-search-text="{{ item.title | lower }}" {% if docs_page.slug == item.slug %}aria-current="page"{% endif %}><i data-lucide="{{ item.icon }}"></i>{{ item.title }}</a>{% endfor %}</div>
+    {% endfor %}
+  </aside>
+  <article class="docs-content" data-doc-content>
+    <nav class="docs-breadcrumbs" aria-label="Breadcrumb"><a href="/docs">Docs</a><i data-lucide="chevron-right"></i><span>{{ docs_page.title }}</span></nav>
+    <p class="docs-kicker">{{ docs_page.eyebrow }}</p><h1>{{ docs_page.title }}</h1><p class="docs-lead">{{ docs_page.summary }}</p>
+    {% include 'docs_pages/' ~ docs_page.slug ~ '.html' %}
+    <footer class="docs-related"><strong>Related documentation</strong><div>{% for slug in docs_page.related %}<a href="/docs/{{ slug if slug != 'getting-started' else '' }}">{{ slug | replace('-', ' ') | title }} <i data-lucide="arrow-right"></i></a>{% endfor %}</div></footer>
+  </article>
+  <aside class="docs-toc" aria-label="On this page"><strong>ON THIS PAGE</strong>{% for anchor, label in docs_page.toc %}<a href="#{{ anchor }}">{{ label }}</a>{% endfor %}</aside>
+</section>
+{% endblock %}

@@ -377,6 +377,51 @@
     return `Request failed (${xhr.status || "network error"}).`;
   };
 
+  const initializeDatasetProgress = () => {
+    document.querySelectorAll("[data-dataset-job]").forEach((element) => {
+      if (element.dataset.pollBound) return;
+      element.dataset.pollBound = "true";
+      const poll = async () => {
+        if (!element.isConnected) return;
+        try {
+          const response = await fetch(`/fragments/dataset/prepare/${encodeURIComponent(element.dataset.datasetJob)}`, {
+            headers: { "HX-Request": "true", "X-Theme": root.dataset.theme || "light" },
+          });
+          if (!response.ok) throw new Error("Dataset status request failed.");
+          const replacement = await response.text();
+          if (!element.isConnected) return;
+          element.outerHTML = replacement;
+          initializeScope();
+        } catch (_) {
+          const status = element.querySelector(".dataset-progress-copy span");
+          if (status) status.textContent = "Reconnecting to dataset preparation status…";
+          window.setTimeout(poll, 900);
+        }
+      };
+      window.setTimeout(poll, 300);
+    });
+  };
+
+  const initializeDocsSearch = (scope = document) => {
+    scope.querySelectorAll("[data-doc-search]").forEach((input) => {
+      if (input.dataset.bound) return;
+      input.dataset.bound = "true";
+      input.addEventListener("input", () => {
+        const query = input.value.trim().toLowerCase();
+        document.querySelectorAll("[data-doc-nav-item]").forEach((item) => {
+          item.hidden = Boolean(query && !item.dataset.docSearchText.includes(query));
+        });
+        document.querySelectorAll("[data-doc-nav-group]").forEach((group) => {
+          const links = [...group.querySelectorAll("[data-doc-nav-item]")];
+          group.hidden = Boolean(query && links.length && links.every((link) => link.hidden));
+        });
+        document.querySelectorAll("[data-doc-section]").forEach((section) => {
+          section.hidden = Boolean(query && !section.dataset.docSearchText.includes(query));
+        });
+      });
+    });
+  };
+
   const initializeScope = (scope = document) => {
     initializeIcons();
     refreshConditionals(scope);
@@ -386,6 +431,8 @@
     initializeRunFilters(scope);
     initializeViewer();
     renderCharts(scope);
+    initializeDatasetProgress();
+    initializeDocsSearch(scope);
   };
 
   document.addEventListener("DOMContentLoaded", () => {

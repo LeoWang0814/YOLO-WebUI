@@ -1,0 +1,4 @@
+<div id="dataset-validation" class="dataset-validation is-preparing" data-dataset-job="{{ job.id }}">
+  <div class="dataset-progress-copy"><i data-lucide="loader-circle"></i><div><strong>{{ job.percent }}% · {{ job.message }}</strong><span>Preparing a local YOLOv10 Detect dataset. You can continue configuring the run.</span></div></div>
+  <div class="dataset-progress-track" aria-label="Dataset preparation {{ job.percent }} percent complete" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ job.percent }}" role="progressbar"><i style="width: {{ job.percent }}%"></i></div>
+</div>

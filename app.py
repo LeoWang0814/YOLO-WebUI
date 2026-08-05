@@ -14,10 +14,14 @@ from fastapi.templating import Jinja2Templates
 from plotly.offline import get_plotlyjs
 
 from core.gpu import get_system_status
+from core.dataset_jobs import DatasetPreparationManager
+from core.datasets import FORMAT_CATALOG, prepared_dataset
 from core.runner import RunConflictError, RunJob, RunManager, build_command, write_run_metadata
 from core.workflows import (
     ROOT,
     RUNS_ROOT,
+    IMAGE_SUFFIXES,
+    VIDEO_SUFFIXES,
     allocate_run_dir,
     collect_outputs,
     discard_unstarted_run,
@@ -35,8 +39,8 @@ from core.workflows import (
     run_metadata,
     save_uploaded_model,
     stage_upload,
-    validate_dataset,
 )
+from web.docs import DOC_NAVIGATION, PRIMARY_CONTROLS, docs_page, docs_slugs, parameter_docs
 from web.forms import expert_groups, expert_values, form_control, form_list, integer, number, required_text
 
 
@@ -44,6 +48,7 @@ templates = Jinja2Templates(directory=str(ROOT / "templates"))
 app = FastAPI(title="YOLOv10 Workbench", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 run_manager = RunManager()
+dataset_manager = DatasetPreparationManager()
 ASSET_VERSION = str(max((ROOT / "static" / "css" / "app.css").stat().st_mtime_ns, (ROOT / "static" / "js" / "app.js").stat().st_mtime_ns))
 
 
@@ -73,7 +78,7 @@ def _model_choices() -> List[str]:
 def _defaults(operation: str) -> Dict[str, Any]:
     if operation == "train":
         return {
-            "data_path": "",
+            "dataset_path": "",
             "pretrained_model": "yolov8n",
             "epochs": 100,
             "patience": 50,
@@ -100,6 +105,7 @@ def _page_context(request: Request, operation: str) -> Dict[str, Any]:
         "expert_groups": expert_groups(operation),
         "form_control": form_control,
         "active_job": active_job,
+        "dataset_formats": FORMAT_CATALOG,
     }
 
 
@@ -171,7 +177,7 @@ def _validate_source_form(form: Any) -> None:
     raise ValueError("Invalid source type.")
 
 
-def _build_args(form: Any, operation: str, run_dir: Path, model_path: str, source: Optional[str] = None) -> Dict[str, Any]:
+def _build_args(form: Any, operation: str, run_dir: Path, model_path: str, source: Optional[str] = None, dataset_data: Optional[str] = None) -> Dict[str, Any]:
     args = expert_values(operation, form)
     device = device_value(str(form.get("device_mode") or "auto"), form.get("single_gpu"), form_list(form, "multi_gpu"))
     if operation == "train":
@@ -179,7 +185,7 @@ def _build_args(form: Any, operation: str, run_dir: Path, model_path: str, sourc
         batch = -1 if batch_raw == "auto" else integer(form, "batch", "Batch", 1)
         args.update(
             {
-                "data": required_text(form, "data_path", "Dataset YAML"),
+                "data": dataset_data or str(form.get("data_path") or "<prepare a dataset folder>"),
                 "model": model_path,
                 "epochs": integer(form, "epochs", "Epochs", 1),
                 "patience": integer(form, "patience", "Patience", 0),
@@ -294,6 +300,34 @@ def runs(request: Request):
     return _template(request, "runs.html", current_page="runs", runs=_list_runs())
 
 
+DOC_PAGES = docs_slugs()
+
+
+@app.get("/docs")
+@app.get("/docs/{page}")
+def docs(request: Request, page: str = "getting-started"):
+    if page not in DOC_PAGES:
+        raise HTTPException(status_code=404, detail="Documentation page not found")
+    choices, metadata = model_catalog()
+    return _template(
+        request,
+        "docs.html",
+        current_page="docs",
+        docs_page=docs_page(page),
+        docs_navigation=DOC_NAVIGATION,
+        dataset_formats=FORMAT_CATALOG,
+        primary_controls=PRIMARY_CONTROLS,
+        train_parameters=parameter_docs("train"),
+        predict_parameters=parameter_docs("predict"),
+        model_choices=choices,
+        model_metadata=metadata,
+        image_suffixes=sorted(IMAGE_SUFFIXES),
+        video_suffixes=sorted(VIDEO_SUFFIXES),
+        launch_host=os.getenv("YOLOV10_WEBUI_HOST", "127.0.0.1"),
+        launch_port=os.getenv("YOLOV10_WEBUI_PORT", "7860"),
+    )
+
+
 @app.get("/runs/{kind}/{name}")
 def run_detail(request: Request, kind: str, name: str):
     if kind not in {"train", "predict"} or Path(name).name != name:
@@ -341,10 +375,24 @@ async def upload_model_fragment(request: Request):
     return _template(request, "fragments/model_upload.html", model_path=model_path)
 
 
+@app.post("/fragments/dataset/prepare")
 @app.post("/fragments/validate-dataset")
 async def dataset_fragment(request: Request):
     form = await request.form()
-    return _template(request, "fragments/dataset_validation.html", dataset=validate_dataset(str(form.get("data_path") or "")))
+    path = str(form.get("dataset_path") or form.get("data_path") or "")
+    job = dataset_manager.start(path)
+    return _template(request, "fragments/dataset_progress.html", job=job.snapshot())
+
+
+@app.get("/fragments/dataset/prepare/{job_id}")
+def dataset_progress_fragment(request: Request, job_id: str):
+    job = dataset_manager.get(job_id)
+    if not job:
+        return _template(request, "fragments/dataset_preparation.html", status_code=404, dataset={"status": "blocked", "message": "Dataset preparation status is no longer available.", "prepared_path": ""})
+    snapshot = job.snapshot()
+    if snapshot["active"]:
+        return _template(request, "fragments/dataset_progress.html", job=snapshot)
+    return _template(request, "fragments/dataset_preparation.html", dataset=snapshot["result"])
 
 
 @app.post("/fragments/preview/{operation}")
@@ -377,12 +425,14 @@ async def start_run(request: Request, operation: str):
         _validate_model_form(form)
         if operation == "predict":
             _validate_source_form(form)
+        dataset_data = prepared_dataset(required_text(form, "dataset_path", "Dataset folder")) if operation == "train" else None
         args = _build_args(
             form,
             operation,
             proposed_dir,
             _preview_model(form),
             _preview_source(form) if operation == "predict" else None,
+            dataset_data=dataset_data,
         )
 
         run_dir = proposed_dir

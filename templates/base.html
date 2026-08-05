@@ -31,6 +31,7 @@
         <a href="/?operation=train" {% if current_page == 'train' %}aria-current="page"{% endif %}><i data-lucide="graduation-cap"></i>Train</a>
         <a href="/?operation=predict" {% if current_page == 'predict' %}aria-current="page"{% endif %}><i data-lucide="scan-line"></i>Predict</a>
         <a href="/runs" {% if current_page == 'runs' %}aria-current="page"{% endif %}><i data-lucide="history"></i>Runs</a>
+        <a href="/docs" {% if current_page == 'docs' %}aria-current="page"{% endif %}><i data-lucide="book-open"></i>Docs</a>
       </nav>
       <div class="topbar-actions">
         <div id="runtime-status" hx-get="/fragments/runtime" hx-trigger="load, every 30s" hx-swap="outerHTML"></div>

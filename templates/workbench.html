@@ -12,12 +12,16 @@
 
     {% if operation == 'train' %}
     <section class="form-section">
-      <div class="section-heading"><h2>Dataset</h2></div>
-      <div class="inline-field-action">
-        <label class="field"><span>Dataset config</span><input name="data_path" required placeholder="datasets/coco8.yaml" value="{{ values.data_path }}"></label>
-        <button class="button button-secondary button-compact" type="button" hx-post="/fragments/validate-dataset" hx-include="[name='data_path']" hx-target="#dataset-validation" hx-disabled-elt="this"><i data-lucide="badge-check"></i>Validate</button>
+      <div class="section-heading">
+        <div><h2>Dataset</h2><p>Inspect a local folder and prepare a strict YOLOv10 Detect dataset.</p></div>
+        <a class="dataset-doc-link" href="/docs/datasets#supported-formats" target="_blank" rel="noopener" title="View supported formats and conversion rules"><span>Supports most popular detection dataset formats</span><i data-lucide="circle-help"></i></a>
       </div>
-      <div id="dataset-validation" class="dataset-validation is-neutral"><i data-lucide="file-search"></i><span>No dataset selected</span></div>
+      <div class="inline-field-action">
+        <label class="field"><span>Dataset folder <small>Local path; source files stay unchanged.</small></span><input name="dataset_path" required placeholder="C:\\datasets\\my-project" value="{{ values.dataset_path }}"></label>
+        <button class="button button-secondary button-compact" type="button" hx-post="/fragments/dataset/prepare" hx-include="[name='dataset_path']" hx-target="#dataset-validation" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#dataset-progress"><i data-lucide="scan-search"></i>Inspect</button>
+      </div>
+      <div id="dataset-progress" class="dataset-progress htmx-indicator" role="status" aria-live="polite"><div class="dataset-progress-copy"><i data-lucide="loader-circle"></i><span>Inspecting and preparing dataset…</span></div><div class="dataset-progress-track"><i></i></div></div>
+      <div id="dataset-validation" class="dataset-validation is-neutral"><i data-lucide="folder-search-2"></i><span>Add a dataset folder to inspect it.</span></div>
     </section>
     {% endif %}
 

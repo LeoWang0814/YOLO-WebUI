@@ -14,7 +14,6 @@ from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Tuple
 import cv2
 import pandas as pd
 import plotly.graph_objects as go
-import yaml
 
 from core.model_zoo import ensure_model, is_model_cached, model_choices
 from core.runner import RunJob
@@ -274,40 +273,6 @@ def collect_outputs(run_dir: Path, prepare_video: bool = True) -> Tuple[List[Pat
     source_videos = [path for path in videos if not path.stem.endswith("_web")]
     video = (source_videos or videos)[0] if videos else None
     return images, ensure_web_video(video) if video and prepare_video else video
-
-
-def validate_dataset(path_value: str) -> Dict[str, Any]:
-    if not path_value:
-        return {"error": "Add a dataset YAML path."}
-    path = Path(path_value)
-    if not path.is_absolute():
-        path = (ROOT / path).resolve()
-    if not path.is_file():
-        return {"error": "Dataset YAML was not found."}
-    try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except Exception as exc:
-        return {"error": f"Invalid YAML: {exc}"}
-    root = Path(payload.get("path", path.parent))
-    if not root.is_absolute():
-        root = (path.parent / root).resolve()
-    splits = []
-    for name in ("train", "val", "test"):
-        raw_values = payload.get(name)
-        if not raw_values:
-            continue
-        values = raw_values if isinstance(raw_values, list) else [raw_values]
-        for raw_value in values:
-            target = Path(raw_value)
-            if not target.is_absolute():
-                target = (root / target).resolve()
-            count = None
-            if target.is_file():
-                count = 1
-            elif target.is_dir():
-                count = sum(1 for item in target.rglob("*") if item.suffix.lower() in IMAGE_SUFFIXES)
-            splits.append({"name": name.title(), "path": str(target), "count": count, "ready": bool(count)})
-    return {"path": str(path), "splits": splits, "error": None if splits else "No dataset splits found in YAML."}
 
 
 def find_results_csv(run_dir: Path) -> Optional[Path]:

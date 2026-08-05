@@ -11,6 +11,7 @@ import app
 from core import workflows
 from core.runner import RunConflictError, RunJob, RunManager
 from web.forms import expert_groups, expert_values
+from web.docs import DOC_NAVIGATION, docs_slugs, parameter_docs
 
 
 def test_generated_run_dirs_are_unique(tmp_path, monkeypatch):
@@ -231,7 +232,70 @@ def test_fastapi_renders_workbench_and_htmx_preview(client):
     assert 'class="command-shell"' not in page.text
     assert 'class="theme-popover"' not in page.text
     assert 'id="media-viewer"' in page.text
+    train = client.get("/?operation=train")
+    assert 'name="dataset_path"' in train.text
+    assert "/docs/datasets#supported-formats" in train.text
+    assert 'class="dataset-doc-link" href="/docs/datasets#supported-formats" target="_blank" rel="noopener"' in train.text
+    assert 'id="dataset-progress"' in train.text
+    assert 'hx-indicator="#dataset-progress"' in train.text
+    assert 'hx-trigger="input changed delay:700ms, blur"' not in train.text
     assert 'href="/?operation=train" aria-label="YOLOv10 Workbench home"' not in page.text
+
+
+def test_docs_are_english_and_dataset_help_is_available(client):
+    landing = client.get("/docs")
+    datasets = client.get("/docs/datasets")
+
+    assert landing.status_code == 200
+    assert "Your first training run" in landing.text
+    assert datasets.status_code == 200
+    assert "Supported formats and conversion rules" in datasets.text
+    assert "YOLOv8 Oriented Bounding Boxes" in datasets.text
+
+
+def test_docs_routes_navigation_and_shared_reference_coverage(client):
+    nav_slugs = {page["slug"] for section in DOC_NAVIGATION for page in section["pages"]}
+    assert nav_slugs == docs_slugs()
+    for slug in sorted(docs_slugs()):
+        response = client.get(f"/docs/{slug}")
+        assert response.status_code == 200
+        assert "Documentation - YOLOv10 Workbench" in response.text
+        assert 'data-doc-search' in response.text
+        assert 'aria-current="page"' in response.text
+
+    train_keys = {key for _, fields in expert_groups("train") for key, _ in fields}
+    predict_keys = {key for _, fields in expert_groups("predict") for key, _ in fields}
+    assert train_keys == {item["key"] for item in parameter_docs("train")}
+    assert predict_keys == {item["key"] for item in parameter_docs("predict")}
+    configuration = client.get("/docs/configuration")
+    assert "Workbench-managed fields" in configuration.text
+    assert "Advanced settings" in configuration.text
+
+
+def test_dataset_preparation_hides_internal_detection_evidence(monkeypatch, client):
+    class CompletedJob:
+        def snapshot(self):
+            return {"id": "completed", "active": False, "result": {"status": "ready", "format": "coco", "images": 2, "objects": 3, "classes": ["cat"], "splits": {"train": 1, "val": 1}, "prepared_path": "C:/managed/data.yaml", "evidence": "annotations.coco.json: internal detection evidence"}}
+
+    class CompletedManager:
+        def start(self, _):
+            return CompletedJob()
+
+        def get(self, _):
+            return CompletedJob()
+
+    monkeypatch.setattr(app, "dataset_manager", CompletedManager())
+
+    response = client.post("/fragments/dataset/prepare", data={"dataset_path": "C:/sample"})
+    completed = client.get("/fragments/dataset/prepare/completed")
+
+    assert response.status_code == 200
+    assert "Preparing a local YOLOv10 Detect dataset" in response.text
+    assert 'data-dataset-job="completed"' in response.text
+    assert completed.status_code == 200
+    assert "View dataset summary" in completed.text
+    assert "annotations.coco.json" not in completed.text
+    assert 'href="/docs/datasets#supported-formats" target="_blank" rel="noopener"' in completed.text
 
     preview = client.post(
         "/fragments/preview/predict",

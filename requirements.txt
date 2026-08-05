@@ -1,11 +1,9 @@
-# YOLOv10 Workbench - CPU installation (default)
+# YOLO-WebUI - CPU installation (default)
 #
-# Python 3.10 is the supported baseline. For an NVIDIA CUDA 11.8 environment,
-# install requirements-cuda118.txt instead of this file.
---index-url https://download.pytorch.org/whl/cpu
---extra-index-url https://pypi.org/simple
-
-torch==2.0.1+cpu
-torchvision==0.15.2+cpu
+# This file intentionally does not set a package index. Pip uses the user's
+# configured index or mirror. For an NVIDIA CUDA environment, use
+# requirements-cuda118.txt instead.
+torch==2.0.1
+torchvision==0.15.2
 
 -r requirements-base.txt

@@ -73,6 +73,9 @@ python app.py
 
 CUDA 检查必须输出 `True`，再在 Workbench 中选择 GPU。启动后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
 
+> [!NOTE]
+> 依赖文件不会强制指定下载源。需要加速时，请在执行安装命令前配置所选 pip 镜像。对于 CUDA 11.8，请使用提供相应 PyTorch CUDA wheel 的镜像，或先从你选择的来源安装该 wheel。
+
 ### 仅 CPU（Windows、macOS 或 Linux）
 
 ```bash

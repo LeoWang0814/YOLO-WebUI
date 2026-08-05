@@ -46,86 +46,43 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 ## Requirements
 
 - Git
-- **Python 3.10** (recommended and supported baseline)
+- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) (Miniconda or Anaconda)
 - Windows, macOS, or Linux
 - Optional: NVIDIA GPU with a driver compatible with CUDA 11.8
 
 > [!IMPORTANT]
-> The default dependency file installs the CPU build of PyTorch. It is the right first choice for a machine without an NVIDIA CUDA setup. Choose the CUDA 11.8 file only when the target machine has a compatible NVIDIA driver.
+> Use the CUDA 11.8 environment first when the target Windows or Linux machine has a compatible NVIDIA driver. Use the CPU environment on machines without CUDA support, including macOS.
 
 ## Quick start
 
-### Windows PowerShell
-
-```powershell
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
-
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-python app.py
-```
-
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860).
-
-### macOS and Linux
+### NVIDIA GPU · CUDA 11.8 (Windows or Linux)
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-python3.10 -m venv .venv
-source .venv/bin/activate
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-python app.py
-```
-
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860).
-
-### NVIDIA CUDA 11.8
-
-Use this complete path instead of the CPU quick start when the target machine has an NVIDIA driver compatible with CUDA 11.8.
-
-#### Windows PowerShell
-
-```powershell
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
-
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements-cuda118.txt
-
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-python app.py
-```
-
-#### macOS and Linux
-
-```bash
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
-
-python3.10 -m venv .venv
-source .venv/bin/activate
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements-cuda118.txt
+conda env create -f environment-cuda118.yml
+conda activate yolo-webui-cuda118
 
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python app.py
 ```
 
 The CUDA check must print `True` before choosing a GPU in the Workbench. Open [http://127.0.0.1:7860](http://127.0.0.1:7860) after launch.
+
+### CPU only (Windows, macOS, or Linux)
+
+```bash
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
+cd yolov10-workbench
+
+conda env create -f environment-cpu.yml
+conda activate yolo-webui-cpu
+
+python app.py
+```
+
+Open [http://127.0.0.1:7860](http://127.0.0.1:7860).
 
 ## Launch options
 
@@ -173,10 +130,9 @@ Only one managed Ultralytics training or prediction process can run at a time. T
 
 ## Development
 
-The service runs directly from the checkout. If you also want the bundled `ultralytics` package installed in editable mode for external scripts, run this after installing the runtime requirements:
+The service runs directly from the checkout. After activating either Conda environment, run the test suite with:
 
 ```bash
-python -m pip install -e . --no-deps
 pytest -q
 ```
 

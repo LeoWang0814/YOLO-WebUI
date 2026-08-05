@@ -46,86 +46,43 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 ## 环境要求
 
 - Git
-- **Python 3.10**（推荐且经过支持的基线版本）
+- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)（Miniconda 或 Anaconda）
 - Windows、macOS 或 Linux
 - 可选：驱动兼容 CUDA 11.8 的 NVIDIA GPU
 
 > [!IMPORTANT]
-> 默认依赖文件安装 CPU 版 PyTorch，适用于没有 NVIDIA CUDA 环境的机器。只有目标机器具备兼容的 NVIDIA 驱动时，才应选择 CUDA 11.8 依赖文件。
+> 对于具备兼容 NVIDIA 驱动的 Windows 或 Linux 机器，请优先使用 CUDA 11.8 环境。没有 CUDA 支持的机器（包括 macOS）请使用 CPU 环境。
 
 ## 快速开始
 
-### Windows PowerShell（CPU，默认）
-
-```powershell
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
-
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-python app.py
-```
-
-打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
-
-### macOS 和 Linux（CPU，默认）
+### NVIDIA GPU · CUDA 11.8（Windows 或 Linux）
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
 cd yolov10-workbench
 
-python3.10 -m venv .venv
-source .venv/bin/activate
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-python app.py
-```
-
-打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
-
-### NVIDIA CUDA 11.8
-
-当目标机器具备与 CUDA 11.8 兼容的 NVIDIA 驱动时，请使用这套完整流程，而不要使用前述 CPU 安装步骤。
-
-#### Windows PowerShell
-
-```powershell
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
-
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements-cuda118.txt
-
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-python app.py
-```
-
-#### macOS 和 Linux
-
-```bash
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
-
-python3.10 -m venv .venv
-source .venv/bin/activate
-
-python -m pip install --upgrade pip
-python -m pip install -r requirements-cuda118.txt
+conda env create -f environment-cuda118.yml
+conda activate yolo-webui-cuda118
 
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python app.py
 ```
 
 CUDA 检查必须输出 `True`，再在 Workbench 中选择 GPU。启动后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
+
+### 仅 CPU（Windows、macOS 或 Linux）
+
+```bash
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
+cd yolov10-workbench
+
+conda env create -f environment-cpu.yml
+conda activate yolo-webui-cpu
+
+python app.py
+```
+
+打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
 
 ## 启动选项
 
@@ -173,10 +130,9 @@ python app.py
 
 ## 开发
 
-服务可以直接从仓库目录运行。如需让外部脚本也以可编辑模式使用内置 `ultralytics` 包，请在安装运行时依赖后执行：
+服务可以直接从仓库目录运行。激活任一 Conda 环境后，可使用以下命令运行测试：
 
 ```bash
-python -m pip install -e . --no-deps
 pytest -q
 ```
 

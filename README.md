@@ -138,9 +138,11 @@ Only one managed Ultralytics training or prediction process can run at a time. T
 
 ## Development
 
-The service runs directly from the checkout. After activating either Conda environment, run the test suite with:
+The service runs directly from the checkout. After activating either Conda environment, install the development extras
+before running the test suite:
 
 ```bash
+pip install -e ".[dev]"
 pytest -q
 ```
 

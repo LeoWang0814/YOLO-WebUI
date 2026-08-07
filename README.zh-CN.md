@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="static/images/yolo-webui-falcon-icon.png" alt="YOLO-WebUI 猎鹰图标" width="160">
+
 # YOLO-WebUI
 
 **中文** | [English](README.md)

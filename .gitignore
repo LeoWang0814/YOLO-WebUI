@@ -143,7 +143,7 @@ datasets/
 example-dataset/
 runs/
 wandb/
-models/
+/models/
 .DS_Store
 
 # Neural Network weights -----------------------------------------------------------------------------------------------

@@ -22,6 +22,8 @@ tqdm==4.67.1
 psutil==5.9.8
 py-cpuinfo==9.0.0
 thop==0.1.1.post2209072238
+huggingface-hub==0.23.2
+safetensors==0.4.3
 
 # Run artifacts, charts, and browser-ready video
 pandas==2.3.1

@@ -14,6 +14,16 @@ from web.forms import expert_groups, expert_values
 from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_page, docs_search_index, docs_slugs, parameter_docs
 
 
+def test_bundled_ultralytics_models_include_yolov10_detection_runtime():
+    from ultralytics import YOLO, YOLOv10
+    from ultralytics.models.yolo.detect import DetectionPredictor
+    from ultralytics.models.yolov10 import YOLOv10DetectionPredictor
+
+    assert YOLO is not None
+    assert YOLOv10.task_map.fget(None)["detect"]["predictor"] is YOLOv10DetectionPredictor
+    assert issubclass(YOLOv10DetectionPredictor, DetectionPredictor)
+
+
 def test_generated_run_dirs_are_unique(tmp_path, monkeypatch):
     monkeypatch.setattr(workflows, "RUNS_ROOT", tmp_path / "runs")
 

@@ -29,6 +29,7 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 - **Dataset-first training:** enter a server-local folder or drag one `.zip` dataset archive into Train, then identify a supported detection format, validate it, and prepare a strict YOLO Detect cache.
 - **Practical model handling:** choose a pretrained model with verified local caching, or use a local `.pt` file or upload.
 - **Focused prediction:** run on image uploads, a video upload, or a local path. URL sources are intentionally not supported.
+- **Resumable uploads:** dataset ZIPs, `.pt` models, images, and videos use sequential 8 MiB chunks, retry transient failures, persist progress across refreshes, and verify the complete SHA-256 checksum before use.
 - **Visible run lifecycle:** one managed run at a time, with live status, command preview, logs, charts, weights, media previews, and a searchable run history.
 - **Product documentation:** built-in Docs includes format conversion rules, parameter reference, runtime behavior, storage guidance, and recovery steps.
 - **Bilingual interface:** the top-bar `中/En` control follows the system language initially and lets each browser choose English or Chinese.
@@ -60,8 +61,8 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 ### NVIDIA GPU
 
 ```bash
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
+cd yolov10-webui
 
 conda init
 conda create -n yolov10 python=3.10
@@ -85,8 +86,8 @@ For older NVIDIA drivers or CUDA 11.8 systems, use `requirements-cuda118.txt` in
 ### CPU
 
 ```bash
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
+cd yolov10-webui
 
 conda init
 conda create -n yolov10 python=3.10
@@ -118,6 +119,16 @@ $env:YOLOV10_WEBUI_PORT="7862"
 python app.py
 ```
 
+For a GPU server exposed through a provider port forward, bind the service to all interfaces and use the forwarded port directly:
+
+```bash
+export YOLOV10_WEBUI_HOST=0.0.0.0
+export YOLOV10_WEBUI_PORT=6006
+python app.py
+```
+
+The browser page and every upload request use this same port; no separate upload port or WebSocket tunnel is required.
+
 > [!WARNING]
 > Binding to `0.0.0.0` exposes the service to devices that can reach the machine. The Workbench has no authentication layer; use a private network or a reverse proxy with access control before sharing it.
 
@@ -129,6 +140,8 @@ python app.py
 4. Start training. Watch live progress and logs; outputs are stored under `runs/train/`.
 5. Open **Predict** to run the selected model on images, video, or a local path. Prediction outputs are stored under `runs/predict/`.
 6. Review artifacts in **Runs**, or open **Docs** for complete in-product instructions and troubleshooting.
+
+Uploads use sequential 8 MiB chunks with automatic retry, pause/continue controls, browser-refresh resume, and a full-file SHA-256 check before the file is accepted. The default per-file limit is 20 GiB and incomplete sessions are retained for seven days. Set `YOLOV10_UPLOAD_MAX_BYTES`, `YOLOV10_UPLOAD_CHUNK_BYTES`, and `YOLOV10_UPLOAD_RETENTION_SECONDS` before launch to adjust those defaults. The server also limits ZIP expansion with `YOLOV10_DATASET_UNCOMPRESSED_MAX_BYTES` and `YOLOV10_DATASET_MAX_FILES`.
 
 Only one managed Ultralytics training or prediction process can run at a time. This prevents conflicting resource usage in the local runtime.
 
@@ -144,6 +157,9 @@ Only one managed Ultralytics training or prediction process can run at a time. T
 | `weights/` | Downloaded pretrained model cache (not committed) |
 | `models/` | User-supplied local model uploads (not committed) |
 | `datasets/uploads/` | Persistent dataset folders extracted from browser-uploaded ZIP archives (not committed) |
+| `datasets/.upload-sessions/` | Resumable upload chunks and metadata, automatically cleaned after the retention period (not committed) |
+
+Runtime directories are intentionally excluded from Git. This keeps uploaded datasets, models, checkpoints, logs, generated runs, and interrupted upload chunks out of commits while preserving the application code and documentation.
 
 ## Development
 

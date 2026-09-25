@@ -3,6 +3,7 @@
   const root = document.documentElement;
   let feedbackTimer;
   const pendingLogScroll = new Map();
+  const uploadTasks = new WeakMap();
   const t = (value) => window.WorkbenchI18n?.t(value) || value;
   const actualTheme = (preference) => preference === "system"
     ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
@@ -135,6 +136,255 @@
     });
   };
 
+  const uploadStatusElement = (zone) => zone.querySelector("[data-upload-status]");
+
+  const setUploadStatus = (zone, state, label, detail, percent = 0) => {
+    if (zone.dataset.uploadKind === "dataset") {
+      setDatasetUploadStatus(zone, state, label, detail, percent);
+      return;
+    }
+    const status = uploadStatusElement(zone);
+    if (!status) return;
+    status.hidden = false;
+    status.classList.remove("is-uploading", "is-saving", "is-error", "is-success", "is-paused");
+    if (state === "error") status.classList.add("is-error");
+    else if (state === "success") status.classList.add("is-success");
+    else if (state === "paused") status.classList.add("is-paused");
+    else status.classList.add("is-uploading");
+    const title = status.querySelector("[data-upload-label]");
+    const summary = status.querySelector("[data-upload-detail]");
+    const track = status.querySelector("[data-upload-track]");
+    const fill = track?.querySelector("i");
+    if (title) title.textContent = label;
+    if (summary) summary.textContent = detail;
+    if (track) {
+      const bounded = Math.max(0, Math.min(100, Math.round(percent)));
+      track.setAttribute("aria-valuenow", String(bounded));
+      if (fill) fill.style.width = `${bounded}%`;
+    }
+    const pause = status.querySelector("[data-upload-pause]");
+    const cancel = status.querySelector("[data-upload-cancel]");
+    const active = state === "hashing" || state === "uploading" || state === "saving";
+    if (pause) {
+      pause.hidden = !active && state !== "paused";
+      pause.textContent = state === "paused" ? t("Resume") : t("Pause");
+    }
+    if (cancel) cancel.hidden = !active && state !== "paused";
+  };
+
+  const setAllRunControlsUploadBusy = (busy) => {
+    document.querySelectorAll("[data-start-run]").forEach((control) => {
+      if (busy) {
+        control.dataset.uploadDisabled = String(control.disabled);
+        control.disabled = true;
+      } else if (control.dataset.uploadDisabled !== undefined) {
+        control.disabled = control.dataset.uploadDisabled === "true";
+        delete control.dataset.uploadDisabled;
+      }
+    });
+  };
+
+  const uploadJson = async (url, options = {}) => {
+    const response = await fetch(url, options);
+    let payload = {};
+    try { payload = await response.json(); } catch (_) { /* handled below */ }
+    if (!response.ok) throw new Error(payload.detail || `Request failed (${response.status}).`);
+    return payload;
+  };
+
+  const hashFile = (file, zone) => new Promise((resolve, reject) => {
+    const worker = new Worker(`/static/js/sha256-worker.js?v=${encodeURIComponent(document.body.dataset.assetVersion || "")}`);
+    worker.onmessage = (event) => {
+      const message = event.data || {};
+      if (message.type === "progress") {
+        const percent = message.total ? message.processed * 100 / message.total : 0;
+        setUploadStatus(zone, "hashing", t("Verifying file…"), `${formatBytes(message.processed)} / ${formatBytes(message.total)}`, percent);
+      } else if (message.type === "complete") {
+        worker.terminate();
+        resolve(message.sha256);
+      } else if (message.type === "error") {
+        worker.terminate();
+        reject(new Error(message.message || t("Unable to verify the file.")));
+      }
+    };
+    worker.onerror = () => { worker.terminate(); reject(new Error(t("Unable to verify the file."))); };
+    worker.postMessage({ file, chunkSize: 8 * 1024 * 1024 });
+  });
+
+  const uploadStorageKey = (kind, file) => `yolov10-workbench.upload.${kind}.${file.name}.${file.size}.${file.lastModified}`;
+
+  const requestChunk = (task, session, file, offset, chunk, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    task.xhr = xhr;
+    xhr.open("PATCH", `/api/uploads/${encodeURIComponent(session.upload_id)}`);
+    xhr.setRequestHeader("Upload-Offset", String(offset));
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(offset + event.loaded);
+    };
+    xhr.onload = () => {
+      task.xhr = null;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText || "{}")); } catch (_) { reject(new Error(t("The server returned an invalid upload response."))); }
+      } else {
+        let message = `Request failed (${xhr.status}).`;
+        try { message = JSON.parse(xhr.responseText || "{}").detail || message; } catch (_) { /* plain response */ }
+        reject(new Error(message));
+      }
+    };
+    xhr.onerror = () => { task.xhr = null; reject(new Error(t("The service could not be reached."))); };
+    xhr.onabort = () => { task.xhr = null; reject(Object.assign(new Error(t("Upload paused.")), { paused: true })); };
+    xhr.send(chunk);
+  });
+
+  const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+  const hiddenUploadContainer = (kind) => document.querySelector(`[data-upload-hidden="${kind}"]`);
+
+  const rememberUploadId = (zone, kind, uploadId) => {
+    const form = zone.closest("form");
+    if (!form) return;
+    if (kind === "model") {
+      let hidden = form.querySelector("[name='model_upload_id']");
+      if (!hidden) { hidden = document.createElement("input"); hidden.type = "hidden"; hidden.name = "model_upload_id"; form.append(hidden); }
+      hidden.value = uploadId;
+      return;
+    }
+    const container = hiddenUploadContainer(kind);
+    if (!container) return;
+    const hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.name = `${kind === "image" ? "image" : "video"}_upload_id`;
+    hidden.value = uploadId;
+    container.append(hidden);
+  };
+
+  const clearUploadIds = (kind) => {
+    if (kind === "model") document.querySelectorAll("[name='model_upload_id']").forEach((node) => node.remove());
+    else hiddenUploadContainer(kind)?.replaceChildren();
+  };
+
+  const finalizeUploadedFile = (zone, kind, file, session, result) => {
+    rememberUploadId(zone, kind, session.upload_id);
+    if (kind === "dataset") {
+      const path = result?.result?.dataset_path || "";
+      const datasetInput = zone.querySelector("[name='dataset_path']");
+      if (datasetInput && path) {
+        datasetInput.value = path;
+        datasetInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+    if (kind === "model") {
+      const path = result?.result?.path || result?.result?.model_path || "";
+      const local = document.querySelector("[name='local_model']");
+      if (local && path) { local.value = path; local.dataset.resumablePath = "true"; local.dispatchEvent(new Event("input", { bubbles: true })); }
+      const modelInput = zone.querySelector("[data-upload-input]");
+      if (modelInput) modelInput.value = "";
+    }
+    const summary = zone.querySelector("[data-file-summary]");
+    if (summary) summary.textContent = file.name;
+  };
+
+  const uploadOneFile = async (zone, kind, file, task) => {
+    const storageKey = uploadStorageKey(kind, file);
+    const digest = await hashFile(file, zone);
+    let session = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+      if (saved?.upload_id && saved.sha256 === digest) {
+        session = await uploadJson(`/api/uploads/${encodeURIComponent(saved.upload_id)}`);
+        if (session.filename !== file.name || Number(session.size) !== file.size || session.sha256 !== digest) session = null;
+      }
+    } catch (_) { session = null; }
+    if (!session) {
+      session = await uploadJson("/api/uploads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, filename: file.name, size: file.size, sha256: digest }) });
+      localStorage.setItem(storageKey, JSON.stringify({ upload_id: session.upload_id, sha256: digest }));
+    }
+    if (session.status === "completed") {
+      finalizeUploadedFile(zone, kind, file, session, session);
+      return session;
+    }
+    const chunkSize = Number(session.chunk_size) || 8 * 1024 * 1024;
+    let offset = Number(session.offset) || 0;
+    let previousBytes = offset;
+    let previousTime = performance.now();
+    while (offset < file.size) {
+      if (task.cancelled) throw Object.assign(new Error(t("Upload cancelled.")), { cancelled: true });
+      if (task.paused) { setUploadStatus(zone, "paused", t("Upload paused"), `${formatBytes(offset)} / ${formatBytes(file.size)}`, offset * 100 / file.size); return null; }
+      const chunk = file.slice(offset, Math.min(file.size, offset + chunkSize));
+      let response;
+      let attempt = 0;
+      while (true) {
+        try {
+          response = await requestChunk(task, session, file, offset, chunk, (loaded) => {
+            const now = performance.now();
+            const speed = (loaded - previousBytes) * 1000 / Math.max(1, now - previousTime);
+            setUploadStatus(zone, "uploading", t("Uploading file…"), `${formatBytes(loaded)} / ${formatBytes(file.size)} · ${formatBytes(speed)}/s`, loaded * 100 / file.size);
+            previousBytes = loaded; previousTime = now;
+          });
+          break;
+        } catch (error) {
+          if (error.paused || task.paused || task.cancelled || attempt >= 2) throw error;
+          await wait(500 * (2 ** attempt));
+          attempt += 1;
+        }
+      }
+      offset = Number(response.offset);
+      session.offset = offset;
+      localStorage.setItem(storageKey, JSON.stringify({ upload_id: session.upload_id, sha256: digest }));
+      setUploadStatus(zone, "uploading", t("Uploading file…"), `${formatBytes(offset)} / ${formatBytes(file.size)}`, offset * 100 / file.size);
+    }
+    setUploadStatus(zone, "saving", t("Finalizing upload…"), `${formatBytes(file.size)} · ${t("Checking checksum…")}`, 100);
+    const completed = await uploadJson(`/api/uploads/${encodeURIComponent(session.upload_id)}/complete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sha256: digest }) });
+    localStorage.removeItem(storageKey);
+    finalizeUploadedFile(zone, kind, file, completed, completed);
+    return completed;
+  };
+
+  const startResumableUpload = async (zone, files) => {
+    const input = zone.querySelector("[data-upload-input]");
+    const kind = zone.dataset.uploadKind;
+    const selected = Array.isArray(files) ? files : [files];
+    if (!kind || !selected.length || selected.some((file) => !file?.name)) return;
+    if (uploadTasks.has(zone)) return;
+    const task = { xhr: null, paused: false, cancelled: false, files: selected };
+    uploadTasks.set(zone, task);
+    setAllRunControlsUploadBusy(true);
+    if (kind === "dataset") setDatasetUploadBusy(zone, true);
+    else {
+      zone.classList.add("is-uploading");
+      if (input) input.disabled = true;
+    }
+    try {
+      clearUploadIds(kind);
+      for (const file of selected) {
+        const completed = await uploadOneFile(zone, kind, file, task);
+        if (!completed && task.paused) return;
+      }
+      if (kind === "dataset") {
+        setDatasetUploadBusy(zone, false);
+        zone.closest(".inline-field-action")?.querySelector("[data-dataset-inspect]")?.click();
+      }
+      setUploadStatus(zone, "success", kind === "dataset" ? t("Dataset archive extracted") : t("Upload complete"), t("Ready to use on this server."), 100);
+    } catch (error) {
+      if (!error.cancelled && !error.paused) {
+        setUploadStatus(zone, "error", t("Upload failed"), error.message || t("The service could not be reached."), 0);
+        showFeedback(error.message || t("The service could not be reached."));
+      }
+    } finally {
+      if (!task.paused) {
+        if (kind === "dataset") setDatasetUploadBusy(zone, false);
+        else {
+          zone.classList.remove("is-uploading");
+          if (input) input.disabled = false;
+        }
+        setAllRunControlsUploadBusy(false);
+      }
+      if (!task.paused) uploadTasks.delete(zone);
+      if (input && !task.paused) input.value = "";
+    }
+  };
+
   const collectDroppedArchive = (dataTransfer) => {
     const files = [...(dataTransfer.files || [])];
     if (files.length !== 1) throw new Error(t("Drop one .zip file at a time."));
@@ -144,64 +394,7 @@
   };
 
   const uploadDatasetArchive = (zone, archive) => {
-    const input = zone.querySelector("[name='dataset_path']");
-    const inspect = zone.closest(".inline-field-action")?.querySelector("[data-dataset-inspect]");
-    if (!input) return;
-    const totalBytes = archive.size;
-    const formData = new FormData();
-    formData.append("dataset_archive", archive, archive.name);
-
-    const xhr = new XMLHttpRequest();
-    let previousLoaded = 0;
-    let previousTime = performance.now();
-    const fail = (message) => {
-      setDatasetUploadBusy(zone, false);
-      setDatasetUploadStatus(zone, "error", t("Uploading dataset…"), message, 0);
-      showFeedback(message);
-    };
-    setDatasetUploadBusy(zone, true);
-    setDatasetUploadStatus(zone, "uploading", t("Uploading dataset…"), `${formatBytes(0)} / ${formatBytes(totalBytes)} · ${t("Calculating speed…")}`, 0);
-
-    xhr.upload.addEventListener("progress", (event) => {
-      if (!event.lengthComputable) return;
-      const now = performance.now();
-      const elapsed = Math.max(1, now - previousTime);
-      const speed = Math.max(0, event.loaded - previousLoaded) * 1000 / elapsed;
-      const fileBytes = totalBytes * event.loaded / Math.max(1, event.total);
-      const percent = event.loaded * 100 / Math.max(1, event.total);
-      setDatasetUploadStatus(zone, "uploading", t("Uploading dataset…"), `${formatBytes(fileBytes)} / ${formatBytes(totalBytes)} · ${formatBytes(speed)}/s`, percent);
-      previousLoaded = event.loaded;
-      previousTime = now;
-    });
-    xhr.upload.addEventListener("load", () => {
-      setDatasetUploadStatus(zone, "saving", t("Extracting dataset archive on server…"), formatBytes(totalBytes), 100);
-    });
-    xhr.addEventListener("load", () => {
-      if (xhr.status < 200 || xhr.status >= 300) {
-        fail(responseMessage(xhr));
-        return;
-      }
-      let payload;
-      try {
-        payload = JSON.parse(xhr.responseText || "{}");
-      } catch (_) {
-        fail(t("The server could not save this dataset upload."));
-        return;
-      }
-      if (!payload.dataset_path) {
-        fail(t("The server could not save this dataset upload."));
-        return;
-      }
-      input.value = payload.dataset_path;
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      setDatasetUploadBusy(zone, false);
-      setDatasetUploadStatus(zone, "success", t("Dataset archive extracted"), `${Number(payload.file_count || 0).toLocaleString()} files · ${formatBytes(payload.total_bytes || 0)} · ${t("Preparing extracted dataset…")}`, 100);
-      inspect?.click();
-    });
-    xhr.addEventListener("error", () => fail(t("The service could not be reached.")));
-    xhr.addEventListener("abort", () => fail(t("Dataset upload was cancelled.")));
-    xhr.open("POST", "/fragments/dataset/upload");
-    xhr.send(formData);
+    startResumableUpload(zone, archive);
   };
 
   const initializeDatasetUploads = (scope = document) => {
@@ -230,6 +423,78 @@
           setDatasetUploadStatus(zone, "error", t("Uploading dataset…"), message, 0);
           showFeedback(message);
         }
+      });
+      zone.querySelectorAll("[data-upload-pause], [data-upload-cancel]").forEach((button) => {
+        if (button.dataset.bound) return;
+        button.dataset.bound = "true";
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const task = uploadTasks.get(zone);
+          if (!task) return;
+          if (button.matches("[data-upload-pause]")) {
+            task.paused = !task.paused;
+            if (task.paused && task.xhr) task.xhr.abort();
+            else if (!task.paused && task.files?.length) {
+              uploadTasks.delete(zone);
+              startResumableUpload(zone, task.files);
+            }
+          } else {
+            task.cancelled = true;
+            task.paused = false;
+            if (task.xhr) task.xhr.abort();
+            setUploadStatus(zone, "error", t("Upload cancelled"), t("Drop the archive again to restart."), 0);
+          }
+        });
+      });
+    });
+  };
+
+  const initializeResumableUploads = (scope = document) => {
+    scope.querySelectorAll("[data-resumable-upload][data-upload-kind]:not([data-upload-kind='dataset'])").forEach((zone) => {
+      const input = zone.querySelector("[data-upload-input]");
+      if (!input || zone.dataset.uploadBound) return;
+      zone.dataset.uploadBound = "true";
+      const acceptFiles = (files) => {
+        const selected = [...(files || [])];
+        if (!selected.length) return;
+        startResumableUpload(zone, input.multiple ? selected : selected.slice(0, 1));
+      };
+      input.addEventListener("change", () => acceptFiles(input.files));
+      ["dragenter", "dragover"].forEach((name) => zone.addEventListener(name, (event) => {
+        event.preventDefault();
+        if (zone.getAttribute("aria-busy") !== "true") zone.classList.add("is-dragover");
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      }));
+      zone.addEventListener("dragleave", (event) => {
+        if (!zone.contains(event.relatedTarget)) zone.classList.remove("is-dragover");
+      });
+      zone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        zone.classList.remove("is-dragover");
+        acceptFiles(event.dataTransfer?.files);
+      });
+      zone.querySelectorAll("[data-upload-pause], [data-upload-cancel]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const task = uploadTasks.get(zone);
+          if (!task) return;
+          if (button.matches("[data-upload-pause]")) {
+            task.paused = !task.paused;
+            if (task.paused && task.xhr) task.xhr.abort();
+            if (!task.paused) {
+              const current = task.files?.length ? task.files : (input.files?.length ? [...input.files] : []);
+              uploadTasks.delete(zone);
+              if (current.length) startResumableUpload(zone, current);
+            }
+          } else {
+            task.cancelled = true;
+            task.paused = false;
+            if (task.xhr) task.xhr.abort();
+            setUploadStatus(zone, "error", t("Upload cancelled"), t("Choose the file again to restart."), 0);
+          }
+        });
       });
     });
   };
@@ -681,6 +946,7 @@
     initializeSearch(scope);
     initializeFileInputs(scope);
     initializeDatasetUploads(scope);
+    initializeResumableUploads(scope);
     initializeLogTerminals();
     initializeRunFilters(scope);
     initializeViewer();
@@ -697,6 +963,9 @@
     document.addEventListener("change", (event) => {
       if (event.target.matches("[name='model_source'], [name='source_type'], [name='device_mode']")) refreshConditionals();
       if (event.target.matches("[name='run_filter']")) updateRunFilter();
+      if (event.target.matches("[name='local_model']") && event.target.dataset.resumablePath !== "true") {
+        document.querySelectorAll("[name='model_upload_id']").forEach((node) => node.remove());
+      }
     });
 
     document.addEventListener("click", (event) => {

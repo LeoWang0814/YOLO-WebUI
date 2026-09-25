@@ -29,6 +29,7 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 - **以数据集为中心的训练：** 检查一个本地文件夹，识别支持的检测数据格式，验证后准备严格的 YOLO Detect 缓存；源文件保持不变。
 - **实用的模型管理：** 可选择带本地校验缓存的预训练模型，或使用本地 `.pt` 文件、上传模型。
 - **专注的预测流程：** 支持图片上传、视频上传和本地路径；刻意不支持 URL 来源。
+- **可恢复上传：** 数据集 ZIP、`.pt` 模型、图片和视频都通过顺序 8 MiB 分片上传，自动重试短暂网络故障，刷新页面后可以继续，并在使用前校验完整 SHA-256。
 - **清晰的运行生命周期：** 同一时间只管理一个运行，提供实时状态、命令预览、日志、图表、权重、媒体预览和可搜索的运行历史。
 - **产品级文档：** 内置 Docs 包含格式转换规则、参数参考、运行时行为、存储说明和恢复步骤。
 - **双语界面：** 顶栏 `中/En` 控件初始跟随系统语言，并允许每个浏览器在英文与中文之间切换。
@@ -57,8 +58,8 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 ### NVIDIA GPU
 
 ```bash
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
+cd yolov10-webui
 
 conda init
 conda create -n yolov10 python=3.10
@@ -82,8 +83,8 @@ python tools/check_cuda.py
 ### CPU
 
 ```bash
-git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-workbench
-cd yolov10-workbench
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
+cd yolov10-webui
 
 conda init
 conda create -n yolov10 python=3.10
@@ -115,6 +116,16 @@ $env:YOLOV10_WEBUI_PORT="7862"
 python app.py
 ```
 
+如果 GPU 服务器由厂家提供端口转发，请让服务监听所有网卡并直接使用被转发的端口：
+
+```bash
+export YOLOV10_WEBUI_HOST=0.0.0.0
+export YOLOV10_WEBUI_PORT=6006
+python app.py
+```
+
+网页和所有上传请求都使用这个端口，不需要额外的上传端口或 WebSocket 隧道。
+
 > [!WARNING]
 > 绑定至 `0.0.0.0` 会让能够连接这台机器的其他设备访问服务。Workbench 没有认证层；如需共享，请使用私有网络，或先部署带访问控制的反向代理。
 
@@ -126,6 +137,8 @@ python app.py
 4. 启动训练，查看实时进度和日志；产物保存在 `runs/train/`。
 5. 打开 **预测（Predict）**，对图片、视频或本地路径运行模型；输出保存在 `runs/predict/`。
 6. 在 **运行记录（Runs）** 中查看产物，或进入 **文档（Docs）** 阅读完整说明与故障排除指南。
+
+上传使用顺序 8 MiB 分片、自动重试、暂停/继续、刷新页面后恢复，并在文件被接受前完成全文件 SHA-256 校验。单文件默认上限为 20 GiB，未完成的会话保留七天。启动前可设置 `YOLOV10_UPLOAD_MAX_BYTES`、`YOLOV10_UPLOAD_CHUNK_BYTES` 和 `YOLOV10_UPLOAD_RETENTION_SECONDS` 调整这些默认值；ZIP 解压还受 `YOLOV10_DATASET_UNCOMPRESSED_MAX_BYTES` 和 `YOLOV10_DATASET_MAX_FILES` 限制。
 
 任意时刻只能运行一个受 Workbench 管理的 Ultralytics 训练或预测进程，以避免本地运行时发生资源冲突。
 
@@ -141,6 +154,9 @@ python app.py
 | `weights/` | 已下载的预训练模型缓存（不提交） |
 | `models/` | 用户提供的本地模型上传文件（不提交） |
 | `datasets/uploads/` | 浏览器上传的 ZIP 数据集解压目录（不提交） |
+| `datasets/.upload-sessions/` | 可恢复上传的分片和元数据，会按保留期限自动清理（不提交） |
+
+运行时目录均已明确排除在 Git 之外，上传的数据集、模型、权重、日志、运行产物和中断上传分片不会进入提交；应用代码和文档仍会正常版本管理。
 
 ## 开发
 

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import time
+import threading
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -17,6 +20,14 @@ from starlette.concurrency import run_in_threadpool
 from core.gpu import cuda_runtime_error, get_system_status
 from core.dataset_jobs import DatasetPreparationManager
 from core.datasets import FORMAT_CATALOG, prepared_dataset
+from core.uploads import (
+    UploadError,
+    UploadStorageError,
+    UploadStore,
+    UploadTooLarge,
+    max_upload_bytes,
+    upload_chunk_bytes,
+)
 from core.runner import RunConflictError, RunJob, RunManager, build_command, write_run_metadata
 from core.workflows import (
     ROOT,
@@ -51,10 +62,15 @@ app = FastAPI(title="YOLOv10 Workbench", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 run_manager = RunManager()
 dataset_manager = DatasetPreparationManager()
+upload_store = UploadStore()
+_last_upload_cleanup = 0.0
+_upload_cleanup_stop = threading.Event()
+_upload_cleanup_thread: Optional[threading.Thread] = None
 ASSET_VERSION = str(max(
     (ROOT / "static" / "css" / "app.css").stat().st_mtime_ns,
     (ROOT / "static" / "js" / "app.js").stat().st_mtime_ns,
     (ROOT / "static" / "js" / "i18n.js").stat().st_mtime_ns,
+    (ROOT / "static" / "js" / "sha256-worker.js").stat().st_mtime_ns,
 ))
 
 
@@ -126,10 +142,18 @@ def _upload_from_form(form: Any, field_name: str, destination: Path) -> Optional
 
 def _source_uploads(form: Any, run_dir: Path) -> tuple[List[Path], Optional[Path]]:
     images: List[Path] = []
+    image_ids = [str(value).strip() for value in form.getlist("image_upload_id") if str(value).strip()]
+    if image_ids:
+        for upload_id in image_ids:
+            images.append(upload_store.stage(upload_id, "image", run_dir / ".source"))
+        return images, None
     for upload in form.getlist("images"):
         if getattr(upload, "filename", None):
             upload.file.seek(0)
             images.append(stage_upload(upload.filename, upload.file, run_dir))
+    video_id = str(form.get("video_upload_id") or "").strip()
+    if video_id:
+        return images, upload_store.stage(video_id, "video", run_dir / ".source")
     video = _upload_from_form(form, "video", run_dir)
     return images, video
 
@@ -158,6 +182,10 @@ def _validate_model_form(form: Any) -> None:
     if source_kind != "local":
         raise ValueError("Invalid model source.")
     local_model = str(form.get("local_model") or "").strip()
+    model_upload_id = str(form.get("model_upload_id") or "").strip()
+    if model_upload_id:
+        upload_store.require_completed(model_upload_id, "model")
+        return
     upload = form.get("model_upload")
     upload_name = str(getattr(upload, "filename", "") or "")
     if local_model:
@@ -171,12 +199,18 @@ def _validate_model_form(form: Any) -> None:
 def _validate_source_form(form: Any) -> None:
     source_type = str(form.get("source_type") or "images")
     if source_type == "images":
-        if not any(getattr(upload, "filename", None) for upload in form.getlist("images")):
+        image_uploads = [upload for upload in form.getlist("images") if getattr(upload, "filename", None)]
+        if not form.getlist("image_upload_id") and not image_uploads:
             raise ValueError("Upload at least one image.")
+        if any(Path(str(upload.filename)).suffix.lower() not in IMAGE_SUFFIXES for upload in image_uploads):
+            raise ValueError("Only supported image files can be uploaded for prediction.")
         return
     if source_type == "video":
-        if not getattr(form.get("video"), "filename", None):
+        video = form.get("video")
+        if not str(form.get("video_upload_id") or "").strip() and not getattr(video, "filename", None):
             raise ValueError("Upload a video.")
+        if getattr(video, "filename", None) and Path(str(video.filename)).suffix.lower() not in VIDEO_SUFFIXES:
+            raise ValueError("Only supported video files can be uploaded for prediction.")
         return
     if source_type == "path":
         required_text(form, "source_path", "Source path")
@@ -391,6 +425,143 @@ def model_hint_fragment(request: Request, pretrained_model: str = ""):
     return _template(request, "fragments/model_hint.html", hint=model_hint(pretrained_model))
 
 
+def _cleanup_upload_sessions() -> None:
+    global _last_upload_cleanup
+    now = time.monotonic()
+    if now - _last_upload_cleanup < 3600:
+        return
+    _last_upload_cleanup = now
+    upload_store.cleanup_expired()
+
+
+def _upload_cleanup_loop() -> None:
+    while not _upload_cleanup_stop.wait(3600):
+        upload_store.cleanup_expired()
+
+
+def start_upload_cleanup():
+    global _upload_cleanup_thread
+    _cleanup_upload_sessions()
+    _upload_cleanup_stop.clear()
+    if not _upload_cleanup_thread or not _upload_cleanup_thread.is_alive():
+        _upload_cleanup_thread = threading.Thread(target=_upload_cleanup_loop, daemon=True, name="upload-cleanup")
+        _upload_cleanup_thread.start()
+
+
+def stop_upload_cleanup():
+    _upload_cleanup_stop.set()
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    start_upload_cleanup()
+    try:
+        yield
+    finally:
+        stop_upload_cleanup()
+
+
+app.router.lifespan_context = _lifespan
+
+
+def _upload_error_response(exc: Exception) -> JSONResponse:
+    status = int(getattr(exc, "status_code", 422))
+    if isinstance(exc, UploadStorageError) or isinstance(exc, OSError):
+        status = 507
+    return JSONResponse({"detail": str(exc)}, status_code=status)
+
+
+def _finalize_resumable_upload(metadata: Dict[str, Any], payload: Path) -> Dict[str, Any]:
+    kind = str(metadata.get("kind") or "")
+    if kind == "dataset":
+        with payload.open("rb") as stream:
+            result = save_uploaded_dataset_archive(str(metadata["filename"]), stream)
+        return {"dataset_path": result["dataset_path"], **result}
+    if kind == "model":
+        with payload.open("rb") as stream:
+            model_path = save_uploaded_model(str(metadata["filename"]), stream)
+        return {"path": str(model_path)}
+    return {}
+
+
+@app.post("/api/uploads")
+async def create_upload_session(request: Request):
+    """Create a persistent resumable upload session."""
+    _cleanup_upload_sessions()
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise UploadError("Upload session body must be a JSON object.")
+        result = await run_in_threadpool(
+            upload_store.create,
+            body.get("kind"),
+            body.get("filename"),
+            body.get("size"),
+            body.get("sha256"),
+        )
+        result["chunk_size"] = upload_chunk_bytes()
+        result["max_size"] = max_upload_bytes()
+        return JSONResponse(result, status_code=201)
+    except Exception as exc:
+        return _upload_error_response(exc)
+
+
+@app.get("/api/uploads/{upload_id}")
+def get_upload_session(upload_id: str):
+    _cleanup_upload_sessions()
+    try:
+        return JSONResponse(upload_store.get(upload_id))
+    except Exception as exc:
+        return _upload_error_response(exc)
+
+
+@app.patch("/api/uploads/{upload_id}")
+async def append_upload_chunk(request: Request, upload_id: str):
+    _cleanup_upload_sessions()
+    try:
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > upload_chunk_bytes():
+            raise UploadTooLarge("Upload chunk is larger than the configured chunk size.")
+        offset = request.headers.get("upload-offset")
+        if offset is None:
+            raise UploadError("Upload-Offset header is required.")
+        payload = await request.body()
+        result = await run_in_threadpool(upload_store.append, upload_id, offset, payload)
+        return JSONResponse(result)
+    except (TypeError, ValueError) as exc:
+        return _upload_error_response(exc)
+    except Exception as exc:
+        return _upload_error_response(exc)
+
+
+@app.post("/api/uploads/{upload_id}/complete")
+async def complete_upload_session(request: Request, upload_id: str):
+    _cleanup_upload_sessions()
+    try:
+        # The checksum is part of session creation; accepting it here as an
+        # optional assertion keeps the endpoint useful to non-browser clients.
+        if request.headers.get("content-length", "0") not in {"", "0"}:
+            body = await request.json()
+            if body and body.get("sha256"):
+                metadata = upload_store.get(upload_id)
+                if str(body["sha256"]).lower() != str(metadata.get("sha256")).lower():
+                    raise UploadError("Completion checksum does not match the upload session.")
+        result = await run_in_threadpool(upload_store.complete, upload_id, _finalize_resumable_upload)
+        return JSONResponse(result)
+    except Exception as exc:
+        return _upload_error_response(exc)
+
+
+@app.delete("/api/uploads/{upload_id}")
+def delete_upload_session(upload_id: str):
+    _cleanup_upload_sessions()
+    try:
+        upload_store.delete(upload_id)
+        return Response(status_code=204)
+    except Exception as exc:
+        return _upload_error_response(exc)
+
+
 @app.post("/fragments/models/upload")
 async def upload_model_fragment(request: Request):
     form = await request.form()
@@ -410,11 +581,16 @@ async def upload_dataset_fragment(request: Request):
     """Extract one browser-uploaded dataset archive before preparation."""
     archive: Any = None
     try:
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > max_upload_bytes() + (1024 * 1024):
+            raise UploadTooLarge("The uploaded dataset archive exceeds the configured upload size limit.")
         form = await request.form(max_files=1, max_fields=8)
         archive = form.get("dataset_archive")
         if not getattr(archive, "filename", None) or not hasattr(archive, "file"):
             raise ValueError("Drop one .zip dataset archive to upload.")
         result = await run_in_threadpool(save_uploaded_dataset_archive, archive.filename, archive.file)
+    except UploadTooLarge as exc:
+        return _upload_error_response(exc)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=422)
     except OSError:
@@ -490,6 +666,10 @@ async def start_run(request: Request, operation: str):
         run_dir.mkdir(parents=True, exist_ok=False)
         run_dir_created = True
         local_model = str(form.get("local_model") or "")
+        model_upload_id = str(form.get("model_upload_id") or "").strip()
+        if model_upload_id:
+            model_upload = upload_store.require_completed(model_upload_id, "model")
+            local_model = str(model_upload.get("result", {}).get("path") or "")
         model_upload = form.get("model_upload")
         if not local_model and getattr(model_upload, "filename", None):
             model_upload.file.seek(0)

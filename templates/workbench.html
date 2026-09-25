@@ -17,12 +17,13 @@
         <a class="dataset-doc-link" href="/docs/datasets#supported-formats" target="_blank" rel="noopener" title="View supported formats and conversion rules"><span>Supports most popular detection dataset formats</span><i data-lucide="circle-help"></i></a>
       </div>
       <div class="inline-field-action">
-        <div class="dataset-input-drop" data-dataset-upload aria-busy="false">
+        <div class="dataset-input-drop" data-dataset-upload data-resumable-upload data-upload-kind="dataset" aria-busy="false">
           <label class="field"><span>Dataset folder <small>Enter a server folder path or drop a .zip dataset archive here to upload.</small></span><input name="dataset_path" required placeholder="/datasets/my-project" value="{{ values.dataset_path }}" aria-describedby="dataset-drop-hint"></label>
           <div id="dataset-drop-hint" class="dataset-drop-hint"><i data-lucide="file-archive"></i><span>Drop one .zip dataset archive here to upload from this browser.</span></div>
-          <div class="dataset-upload-status" data-dataset-upload-status role="status" aria-live="polite" hidden>
-            <div class="dataset-upload-copy"><i data-lucide="loader-circle"></i><div><strong data-dataset-upload-label>Uploading dataset…</strong><span data-dataset-upload-detail></span></div></div>
-            <div class="dataset-progress-track" data-dataset-upload-track role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+          <div class="dataset-upload-status" data-dataset-upload-status data-upload-status role="status" aria-live="polite" hidden>
+            <div class="dataset-upload-copy"><i data-lucide="loader-circle"></i><div><strong data-dataset-upload-label data-upload-label>Uploading dataset…</strong><span data-dataset-upload-detail data-upload-detail></span></div></div>
+            <div class="dataset-progress-track" data-dataset-upload-track data-upload-track role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+            <div class="upload-actions"><button type="button" class="button button-secondary button-compact" data-upload-pause hidden>Pause</button><button type="button" class="button button-secondary button-compact" data-upload-cancel hidden>Cancel</button></div>
           </div>
         </div>
         <button class="button button-secondary button-compact" type="button" data-dataset-inspect hx-post="/fragments/dataset/prepare" hx-include="[name='dataset_path']" hx-target="#dataset-validation" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#dataset-progress"><i data-lucide="scan-search"></i>Inspect</button>
@@ -44,7 +45,7 @@
       </div>
       <div class="conditional-block" data-conditional="model_source:local" hidden>
         <label class="field"><span>Local model path</span><input id="local-model-path" name="local_model" placeholder="models/custom.pt"></label>
-        <label class="upload-drop"><input name="model_upload" type="file" accept=".pt" hx-post="/fragments/models/upload" hx-trigger="change" hx-target="#model-upload-status" hx-encoding="multipart/form-data" hx-disabled-elt="this"><i data-lucide="upload"></i><span><strong>Choose a .pt file</strong><small data-file-summary>No file selected</small></span></label>
+        <label class="upload-drop" data-resumable-upload data-upload-kind="model"><input name="model_upload" type="file" accept=".pt" data-upload-input><i data-lucide="upload"></i><span><strong>Choose a .pt file</strong><small data-file-summary>No file selected</small></span><div class="upload-progress" data-upload-status role="status" aria-live="polite" hidden><strong data-upload-label>Preparing upload…</strong><span data-upload-detail></span><div class="dataset-progress-track" data-upload-track role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div><div class="upload-actions"><button type="button" class="button button-secondary button-compact" data-upload-pause hidden>Pause</button><button type="button" class="button button-secondary button-compact" data-upload-cancel hidden>Cancel</button></div></div></label>
         <div id="model-upload-status"></div>
       </div>
     </section>
@@ -57,8 +58,10 @@
         <label><input type="radio" name="source_type" value="video"><span>Video</span></label>
         <label><input type="radio" name="source_type" value="path"><span>Path</span></label>
       </div>
-      <label class="upload-drop" data-conditional="source_type:images"><input name="images" type="file" accept="image/*" multiple><i data-lucide="images"></i><span><strong>Choose images</strong><small data-file-summary>No files selected</small></span></label>
-      <label class="upload-drop" data-conditional="source_type:video" hidden><input name="video" type="file" accept="video/*"><i data-lucide="file-video"></i><span><strong>Choose a video</strong><small data-file-summary>No file selected</small></span></label>
+      <label class="upload-drop" data-resumable-upload data-upload-kind="image" data-conditional="source_type:images"><input name="images" type="file" accept="image/*" multiple data-upload-input><i data-lucide="images"></i><span><strong>Choose images</strong><small data-file-summary>No files selected</small></span><div class="upload-progress" data-upload-status role="status" aria-live="polite" hidden><strong data-upload-label>Preparing upload…</strong><span data-upload-detail></span><div class="dataset-progress-track" data-upload-track role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div><div class="upload-actions"><button type="button" class="button button-secondary button-compact" data-upload-pause hidden>Pause</button><button type="button" class="button button-secondary button-compact" data-upload-cancel hidden>Cancel</button></div></div></label>
+      <div data-upload-hidden="image"></div>
+      <label class="upload-drop" data-resumable-upload data-upload-kind="video" data-conditional="source_type:video" hidden><input name="video" type="file" accept="video/*" data-upload-input><i data-lucide="file-video"></i><span><strong>Choose a video</strong><small data-file-summary>No file selected</small></span><div class="upload-progress" data-upload-status role="status" aria-live="polite" hidden><strong data-upload-label>Preparing upload…</strong><span data-upload-detail></span><div class="dataset-progress-track" data-upload-track role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div><div class="upload-actions"><button type="button" class="button button-secondary button-compact" data-upload-pause hidden>Pause</button><button type="button" class="button button-secondary button-compact" data-upload-cancel hidden>Cancel</button></div></label>
+      <div data-upload-hidden="video"></div>
       <label class="field conditional-block" data-conditional="source_type:path" hidden><span>Source path</span><input name="source_path" placeholder="C:\data\images"></label>
     </section>
     {% endif %}

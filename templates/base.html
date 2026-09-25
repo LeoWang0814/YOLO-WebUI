@@ -26,9 +26,10 @@
   <script defer src="/static/vendor/htmx.min.js"></script>
   <script defer src="/static/vendor/lucide.min.js"></script>
   <script defer src="/static/js/i18n.js?v={{ asset_version }}"></script>
+  <script defer src="/static/js/sha256-worker.js?v={{ asset_version }}"></script>
   <script defer src="/static/js/app.js?v={{ asset_version }}"></script>
 </head>
-<body>
+<body data-asset-version="{{ asset_version }}">
   <div class="application-shell">
     <header class="topbar">
       <div class="wordmark" aria-label="YOLOv10 Workbench">

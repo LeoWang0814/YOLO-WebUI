@@ -1,4 +1,5 @@
 import io
+import hashlib
 import os
 import signal
 import threading
@@ -13,6 +14,7 @@ from starlette.datastructures import FormData
 
 import app
 from core import download_sources, gpu, model_zoo, runner, workflows
+from core.uploads import UploadStore
 from core.runner import RunConflictError, RunJob, RunManager
 from web.forms import expert_groups, expert_values
 from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_page, docs_search_index, docs_slugs, parameter_docs
@@ -149,6 +151,73 @@ def test_dataset_upload_rejects_non_zip_files(client):
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Only .zip dataset archives are supported."
+
+
+def test_resumable_upload_supports_resume_and_idempotent_retry(tmp_path, monkeypatch, client):
+    upload_root = tmp_path / "sessions"
+    monkeypatch.setattr(app.upload_store, "root", upload_root)
+    payload = b"a small prediction image payload"
+    digest = hashlib.sha256(payload).hexdigest()
+    created = client.post(
+        "/api/uploads",
+        json={"kind": "image", "filename": "sample.jpg", "size": len(payload), "sha256": digest},
+    )
+    assert created.status_code == 201
+    upload_id = created.json()["upload_id"]
+
+    first = client.patch(f"/api/uploads/{upload_id}", headers={"Upload-Offset": "0"}, content=payload[:5])
+    assert first.status_code == 200
+    retry = client.patch(f"/api/uploads/{upload_id}", headers={"Upload-Offset": "0"}, content=payload[:5])
+    assert retry.status_code == 200
+    conflict = client.patch(f"/api/uploads/{upload_id}", headers={"Upload-Offset": "0"}, content=b"wrong")
+    assert conflict.status_code == 409
+    completed = client.patch(
+        f"/api/uploads/{upload_id}",
+        headers={"Upload-Offset": "5"},
+        content=payload[5:],
+    )
+    assert completed.json()["offset"] == len(payload)
+    final = client.post(f"/api/uploads/{upload_id}/complete", json={"sha256": digest})
+    assert final.status_code == 200
+    assert final.json()["status"] == "completed"
+    staged = app.upload_store.stage(upload_id, "image", tmp_path / "run" / ".source")
+    assert staged.read_bytes() == payload
+
+
+def test_resumable_dataset_upload_verifies_checksum_and_extracts(tmp_path, monkeypatch, client):
+    session_root = tmp_path / "sessions"
+    dataset_root = tmp_path / "datasets"
+    monkeypatch.setattr(app.upload_store, "root", session_root)
+    monkeypatch.setattr(workflows, "DATASET_UPLOADS_ROOT", dataset_root)
+    archive = _dataset_archive({"dataset/train/images/a.jpg": b"image"}).getvalue()
+    digest = hashlib.sha256(archive).hexdigest()
+    created = client.post(
+        "/api/uploads",
+        json={"kind": "dataset", "filename": "dataset.zip", "size": len(archive), "sha256": digest},
+    )
+    upload_id = created.json()["upload_id"]
+    assert client.patch(f"/api/uploads/{upload_id}", headers={"Upload-Offset": "0"}, content=archive).status_code == 200
+    final = client.post(f"/api/uploads/{upload_id}/complete", json={"sha256": digest})
+    assert final.status_code == 200
+    dataset_path = Path(final.json()["result"]["dataset_path"])
+    assert (dataset_path / "train" / "images" / "a.jpg").read_bytes() == b"image"
+
+
+def test_resumable_upload_rejects_checksum_mismatch_and_cleans_expired_sessions(tmp_path):
+    store = UploadStore(tmp_path / "sessions")
+    payload = b"payload"
+    session = store.create("image", "a.jpg", len(payload), hashlib.sha256(b"different").hexdigest())
+    store.append(session["upload_id"], 0, payload)
+    with pytest.raises(ValueError, match="SHA-256"):
+        store.complete(session["upload_id"])
+    assert store.get(session["upload_id"])["status"] == "failed"
+    old = tmp_path / "sessions" / "old"
+    old.mkdir()
+    (old / "meta.json").write_text(
+        '{"upload_id":"old","updated_at":"2000-01-01T00:00:00+00:00"}', encoding="utf-8"
+    )
+    assert store.cleanup_expired() == 1
+    assert not old.exists()
 
 
 @pytest.mark.parametrize("source_type", ["images", "video", "path"])

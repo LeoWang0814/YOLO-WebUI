@@ -146,6 +146,7 @@ input::placeholder { color: var(--faint); }
 .upload-drop { position: relative; display: flex; min-height: 72px; max-width: 560px; align-items: center; gap: 12px; margin-top: 12px; padding: 13px 15px; border: 1px dashed var(--border-strong); border-radius: 6px; background: var(--surface-subtle); color: var(--muted); cursor: pointer; }
 .upload-drop:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .upload-drop.is-uploading { border-color: var(--accent); cursor: wait; opacity: .72; }
+.upload-drop.is-dragover { border-color: var(--accent); background: var(--accent-soft); }
 .upload-drop > input { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; opacity: 0; }
 .upload-drop > svg { width: 20px; height: 20px; }
 .upload-drop span { display: grid; min-width: 0; gap: 2px; }
@@ -153,6 +154,16 @@ input::placeholder { color: var(--faint); }
 .upload-drop small { overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .upload-status { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--success); font-size: 12px; font-weight: 650; }
 .upload-status.is-error { color: var(--danger); }
+.upload-progress { display: grid; flex: 1 1 100%; min-width: 0; gap: 5px; margin-top: 8px; }
+.upload-progress > strong, .upload-progress > span { display: block; font-size: 11px; }
+.upload-progress > strong { color: var(--text); }
+.upload-progress > span { color: var(--muted); }
+.upload-progress .dataset-progress-track { height: 5px; }
+.upload-progress.is-uploading .dataset-progress-track i { background: var(--accent); }
+.upload-progress.is-error .dataset-progress-track i { background: var(--danger); }
+.upload-progress.is-success .dataset-progress-track i { background: var(--success); }
+.upload-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.upload-actions .button { min-height: 25px; padding: 0 8px; font-size: 10px; }
 .dataset-validation { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-top: 11px; color: var(--muted); font-size: 12px; }
 .dataset-validation.is-neutral { align-items: center; }
 .dataset-validation.is-error { color: var(--danger); }

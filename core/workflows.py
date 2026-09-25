@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import shutil
 import stat
@@ -29,6 +30,42 @@ RUNS_ROOT = ROOT / "runs"
 DATASET_UPLOADS_ROOT = ROOT / "datasets" / "uploads"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+DEFAULT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
+DEFAULT_DATASET_UNCOMPRESSED_MAX_BYTES = 100 * 1024 * 1024 * 1024
+DEFAULT_DATASET_MAX_FILES = 200_000
+
+
+def _upload_limit(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _stream_size(stream: BinaryIO) -> Optional[int]:
+    if not hasattr(stream, "seek") or not hasattr(stream, "tell"):
+        return None
+    try:
+        position = stream.tell()
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(position)
+        return int(size)
+    except (OSError, ValueError):
+        return None
+
+
+def _copy_stream_atomic(stream: BinaryIO, destination: Path) -> None:
+    temporary = destination.parent / f".upload-{uuid.uuid4().hex}.part"
+    try:
+        with temporary.open("wb") as target:
+            shutil.copyfileobj(stream, target, length=1024 * 1024)
+            target.flush()
+            os.fsync(target.fileno())
+        temporary.replace(destination)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def model_catalog() -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
@@ -145,6 +182,9 @@ def save_uploaded_model(filename: str, stream: BinaryIO) -> Path:
     incoming = Path(filename or "").name
     if not incoming or Path(incoming).suffix.lower() != ".pt":
         raise ValueError("Only .pt model files are supported.")
+    size = _stream_size(stream)
+    if size is not None and size > _upload_limit("YOLOV10_UPLOAD_MAX_BYTES", DEFAULT_UPLOAD_MAX_BYTES):
+        raise ValueError("The uploaded model exceeds the configured upload size limit.")
     destination_dir = ROOT / "models"
     destination_dir.mkdir(parents=True, exist_ok=True)
     destination = destination_dir / incoming
@@ -152,8 +192,7 @@ def save_uploaded_model(filename: str, stream: BinaryIO) -> Path:
     while destination.exists():
         destination = destination_dir / f"{destination.stem}-{suffix}{destination.suffix}"
         suffix += 1
-    with destination.open("wb") as target:
-        shutil.copyfileobj(stream, target)
+    _copy_stream_atomic(stream, destination)
     return destination.resolve()
 
 
@@ -161,6 +200,9 @@ def stage_upload(filename: str, stream: BinaryIO, run_dir: Path) -> Path:
     incoming = Path(filename or "").name
     if not incoming:
         raise ValueError("Uploaded file has no filename.")
+    size = _stream_size(stream)
+    if size is not None and size > _upload_limit("YOLOV10_UPLOAD_MAX_BYTES", DEFAULT_UPLOAD_MAX_BYTES):
+        raise ValueError("The uploaded file exceeds the configured upload size limit.")
     source_dir = run_dir / ".source"
     source_dir.mkdir(parents=True, exist_ok=True)
     destination = source_dir / incoming
@@ -168,8 +210,7 @@ def stage_upload(filename: str, stream: BinaryIO, run_dir: Path) -> Path:
     while destination.exists():
         destination = source_dir / f"{destination.stem}-{suffix}{destination.suffix}"
         suffix += 1
-    with destination.open("wb") as target:
-        shutil.copyfileobj(stream, target)
+    _copy_stream_atomic(stream, destination)
     return destination.resolve()
 
 
@@ -228,6 +269,10 @@ def save_uploaded_dataset_archive(filename: str, stream: BinaryIO) -> Dict[str, 
     incoming = Path(filename or "").name
     if not incoming or Path(incoming).suffix.lower() != ".zip":
         raise ValueError("Only .zip dataset archives are supported.")
+    archive_size = _stream_size(stream)
+    max_archive_size = _upload_limit("YOLOV10_UPLOAD_MAX_BYTES", DEFAULT_UPLOAD_MAX_BYTES)
+    if archive_size is not None and archive_size > max_archive_size:
+        raise ValueError("The uploaded dataset archive exceeds the configured upload size limit.")
     root = DATASET_UPLOADS_ROOT.resolve()
     root.mkdir(parents=True, exist_ok=True)
     token = uuid.uuid4().hex
@@ -243,6 +288,15 @@ def save_uploaded_dataset_archive(filename: str, stream: BinaryIO) -> Dict[str, 
             entries = [entry for entry in archive.infolist() if not entry.is_dir()]
             if not entries:
                 raise ValueError("The ZIP archive does not contain any files.")
+            max_files = _upload_limit("YOLOV10_DATASET_MAX_FILES", DEFAULT_DATASET_MAX_FILES)
+            if len(entries) > max_files:
+                raise ValueError("The dataset archive contains too many files.")
+            max_uncompressed = _upload_limit(
+                "YOLOV10_DATASET_MAX_UNCOMPRESSED_BYTES", DEFAULT_DATASET_UNCOMPRESSED_MAX_BYTES
+            )
+            declared_bytes = sum(max(0, int(entry.file_size)) for entry in entries)
+            if declared_bytes > max_uncompressed:
+                raise ValueError("The dataset archive expands beyond the configured safety limit.")
             original_paths = []
             for entry in entries:
                 if entry.flag_bits & 0x1:
@@ -264,8 +318,18 @@ def save_uploaded_dataset_archive(filename: str, stream: BinaryIO) -> Dict[str, 
                     raise ValueError("ZIP archive paths must stay inside the dataset folder.")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(entry) as source, target.open("wb") as output:
-                    shutil.copyfileobj(source, output)
-                total_bytes += target.stat().st_size
+                    remaining = max(0, int(entry.file_size))
+                    while remaining:
+                        block = source.read(min(1024 * 1024, remaining))
+                        if not block:
+                            break
+                        output.write(block)
+                        remaining -= len(block)
+                        total_bytes += len(block)
+                        if total_bytes > max_uncompressed:
+                            raise ValueError("The dataset archive expands beyond the configured safety limit.")
+                    if remaining:
+                        raise ValueError("The dataset archive contains a truncated file.")
                 file_count += 1
         temporary.replace(destination)
     except (zipfile.BadZipFile, NotImplementedError) as exc:

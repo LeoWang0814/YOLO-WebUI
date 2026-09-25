@@ -100,12 +100,12 @@ DOC_SECTION_KEYWORDS: Dict[tuple[str, str], List[str]] = {
 
 
 PRIMARY_CONTROLS = [
-    ("Train", "Dataset folder", "Local directory inspected into a prepared YOLO Detect dataset before a run can start."),
+    ("Train", "Dataset folder", "Enter a server-local directory or drop one browser ZIP archive to upload, extract, and prepare it before a run can start."),
     ("Train", "Model", "Select a verified pretrained model, a local .pt path, or upload a .pt file."),
     ("Train", "Epochs", "Maximum number of training epochs."),
     ("Train", "Patience", "Epochs without improvement allowed before early stopping; 0 disables patience-based stopping."),
     ("Train", "Image size", "Training image size; larger values require more compute and memory."),
-    ("Train", "Batch", "Images per optimization step; Auto delegates batch sizing to Ultralytics."),
+    ("Train", "Batch", "Images per optimization step. Enter -1 for Ultralytics AutoBatch on one CUDA GPU; use a positive integer for CPU or multiple GPUs."),
     ("Train", "Workers", "Data-loader worker processes; lower this if the machine is resource constrained."),
     ("Train / Predict", "Device", "Auto, CPU, one CUDA GPU, or multiple CUDA GPUs when available."),
     ("Predict", "Source", "Uploaded images, one uploaded video, or a local filesystem path. URLs are not supported."),

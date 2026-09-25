@@ -8,7 +8,7 @@ from core.args_schema import build_grouped_defaults, coerce_dict
 
 
 MANAGED_FIELDS = {
-    "train": {"task", "mode", "data", "model", "project", "name", "exist_ok", "epochs", "patience", "batch", "imgsz", "device", "workers", "verbose"},
+    "train": {"task", "mode", "data", "model", "project", "name", "exist_ok", "epochs", "patience", "batch", "imgsz", "device", "workers", "verbose", "save", "val", "pretrained", "resume", "time"},
     "predict": {"task", "mode", "model", "source", "project", "name", "exist_ok", "imgsz", "conf", "iou", "device", "save"},
 }
 

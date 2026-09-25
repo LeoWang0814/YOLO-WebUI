@@ -1,9 +1,14 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
 # Builds ultralytics/ultralytics:latest image on DockerHub https://hub.docker.com/r/ultralytics/ultralytics
-# Image is CUDA-optimized for YOLOv8 single/multi-GPU training and inference
+# Image is CUDA-optimized for YOLOv8 single/multi-GPU training and inference.
+# CUDA 12.8 is required for NVIDIA Blackwell (RTX 50-series, sm_120).
 
 # Start FROM PyTorch image https://hub.docker.com/r/pytorch/pytorch or nvcr.io/nvidia/pytorch:23.03-py3
-FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
+# Request both CUDA compute and NVML capabilities from nvidia-container-runtime.
+# Without `compute`, nvidia-smi may work while cuInit() returns error 999.
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    CUDA_DEVICE_ORDER=PCI_BUS_ID
 RUN pip install --no-cache nvidia-tensorrt --index-url https://pypi.ngc.nvidia.com
 
 # Downloads to user config dir

@@ -64,14 +64,20 @@ conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
-pip install -r requirements.txt
+pip install -r requirements-cuda128.txt
 pip install -e .
 
-python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.device_count())"
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list(), torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-检查结果应显示 CUDA 版本、`True` 和识别到的 GPU 数量。随后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
+检查结果应显示 CUDA `12.8`、包含本机架构的列表（RTX 50 系列应包含 `sm_120`）、`True` 和识别到的 GPU 数量。如果 `nvidia-smi` 能看到 GPU 但这里返回 `False`，请运行详细诊断：
+
+```bash
+python tools/check_cuda.py
+```
+
+旧版 NVIDIA 驱动或 CUDA 11.8 环境请使用 `requirements-cuda118.txt`。镜像已请求 `compute,utility` 两种 NVIDIA driver capability；缺少 `compute` 时可能出现 `nvidia-smi` 正常但 `cuInit()` 返回 `CUDA_ERROR_UNKNOWN (999)`。使用 Docker 时必须通过 NVIDIA runtime 把分配的 GPU 传入容器（`--gpus all` 或 `--gpus '"device=0,1"'`）。如果仍然出现 999，这是宿主机或容器的 NVIDIA 驱动运行时与设备映射问题，重新安装 Python 包无法修复；请先重建 NVIDIA runtime 容器，或在宿主机修复 `nvidia_uvm` 模块和 GPU 设备节点。随后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
 
 ### CPU
 
@@ -83,7 +89,7 @@ conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
-pip install -r requirements.txt
+pip install -r requirements-cpu.txt
 pip install -e .
 
 python app.py
@@ -114,7 +120,7 @@ python app.py
 
 ## 首次使用流程
 
-1. 打开 **训练（Train）**，输入包含图片与标注的文件夹路径。
+1. 打开 **训练（Train）**，输入服务器上的图片与标注文件夹路径，或将一个 `.zip` 数据集压缩包拖到同一个输入框，上传后由 Workbench 自动解压。
 2. 选择 **检查（Inspect）**。Workbench 会识别数据集格式、验证记录，并且仅在严格转换可行时准备缓存。
 3. 选择预训练模型或提供本地 `.pt` 模型，配置主要训练字段并查看自动生成的命令。
 4. 启动训练，查看实时进度和日志；产物保存在 `runs/train/`。
@@ -134,6 +140,7 @@ python app.py
 | `runs/` | 训练和预测产物（不提交） |
 | `weights/` | 已下载的预训练模型缓存（不提交） |
 | `models/` | 用户提供的本地模型上传文件（不提交） |
+| `datasets/uploads/` | 浏览器上传的 ZIP 数据集解压目录（不提交） |
 
 ## 开发
 

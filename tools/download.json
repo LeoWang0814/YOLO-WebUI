@@ -12,7 +12,8 @@
           "size_mb": 6.23,
           "sha256": "31e20dde3def09e2cf938c7be6fe23d9150bbbe503982af13345706515f2ef95",
           "sources": {
-            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov8n.pt"
+            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov8n.pt",
+            "nanoberry": "https://drive.nanoberry.dev/web/client/pubshares/aTA8VSJe65RVbqmFwazrXp?compress=false"
           }
         },
         "yolov10n": {
@@ -20,7 +21,8 @@
           "size_mb": 10.9,
           "sha256": "61b91ffc99b284792dca49bf40216945833cc2a515e1a742954e6e9327cfc19e",
           "sources": {
-            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10n.pt"
+            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10n.pt",
+            "nanoberry": "https://drive.nanoberry.dev/web/client/pubshares/kU486vcoTBurqvuGadfqfK?compress=false"
           }
         },
         "yolov10m": {
@@ -28,7 +30,8 @@
           "size_mb": 63.8,
           "sha256": "ff2c559f11d13701abc4e0345f82851d146ecfe7035efaafcc08475cfd8b5f2d",
           "sources": {
-            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10m.pt"
+            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10m.pt",
+            "nanoberry": "https://drive.nanoberry.dev/web/client/pubshares/S9gSobmUmT883M5wVFih3T?compress=false"
           }
         },
         "yolov10b": {
@@ -36,7 +39,8 @@
           "size_mb": 79.1,
           "sha256": "3846434cbf0016b663a1ccd6d843c48468f6852f4feeddcb9f67f9182168c142",
           "sources": {
-            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10b.pt"
+            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10b.pt",
+            "nanoberry": "https://drive.nanoberry.dev/web/client/pubshares/5HNwHKvNdrZma69BM9eLWn?compress=false"
           }
         },
         "yolov10l": {
@@ -44,7 +48,8 @@
           "size_mb": 99.6,
           "sha256": "83769ec3cbc61f18113f612f8bdcf922396628d620682bb72966e9b148004b8b",
           "sources": {
-            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10l.pt"
+            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10l.pt",
+            "nanoberry": "https://drive.nanoberry.dev/web/client/pubshares/ffu2NWh8284tai2iRKu9pp?compress=false"
           }
         },
         "yolov10x": {
@@ -52,7 +57,8 @@
           "size_mb": 122,
           "sha256": "6e6eae65e6c268c49a25849922e0c75a5c707d626d67170d16a97813b0f8eb79",
           "sources": {
-            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10x.pt"
+            "github": "https://github.com/LeoWang0814/yolov10-webui/releases/download/Pretrained-model/yolov10x.pt",
+            "nanoberry": "https://drive.nanoberry.dev/web/client/pubshares/kSvkn37uKqDjPnpojbH6LR?compress=false"
           }
         }
       }

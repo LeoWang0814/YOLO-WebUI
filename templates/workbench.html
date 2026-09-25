@@ -17,8 +17,15 @@
         <a class="dataset-doc-link" href="/docs/datasets#supported-formats" target="_blank" rel="noopener" title="View supported formats and conversion rules"><span>Supports most popular detection dataset formats</span><i data-lucide="circle-help"></i></a>
       </div>
       <div class="inline-field-action">
-        <label class="field"><span>Dataset folder <small>Local path; source files stay unchanged.</small></span><input name="dataset_path" required placeholder="C:\\datasets\\my-project" value="{{ values.dataset_path }}"></label>
-        <button class="button button-secondary button-compact" type="button" hx-post="/fragments/dataset/prepare" hx-include="[name='dataset_path']" hx-target="#dataset-validation" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#dataset-progress"><i data-lucide="scan-search"></i>Inspect</button>
+        <div class="dataset-input-drop" data-dataset-upload aria-busy="false">
+          <label class="field"><span>Dataset folder <small>Enter a server folder path or drop a .zip dataset archive here to upload.</small></span><input name="dataset_path" required placeholder="/datasets/my-project" value="{{ values.dataset_path }}" aria-describedby="dataset-drop-hint"></label>
+          <div id="dataset-drop-hint" class="dataset-drop-hint"><i data-lucide="file-archive"></i><span>Drop one .zip dataset archive here to upload from this browser.</span></div>
+          <div class="dataset-upload-status" data-dataset-upload-status role="status" aria-live="polite" hidden>
+            <div class="dataset-upload-copy"><i data-lucide="loader-circle"></i><div><strong data-dataset-upload-label>Uploading dataset…</strong><span data-dataset-upload-detail></span></div></div>
+            <div class="dataset-progress-track" data-dataset-upload-track role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+          </div>
+        </div>
+        <button class="button button-secondary button-compact" type="button" data-dataset-inspect hx-post="/fragments/dataset/prepare" hx-include="[name='dataset_path']" hx-target="#dataset-validation" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#dataset-progress"><i data-lucide="scan-search"></i>Inspect</button>
       </div>
       <div id="dataset-progress" class="dataset-progress htmx-indicator" role="status" aria-live="polite"><div class="dataset-progress-copy"><i data-lucide="loader-circle"></i><span>Inspecting and preparing dataset…</span></div><div class="dataset-progress-track"><i></i></div></div>
       <div id="dataset-validation" class="dataset-validation is-neutral"><i data-lucide="folder-search-2"></i><span>Add a dataset folder to inspect it.</span></div>
@@ -63,7 +70,7 @@
         <label class="field"><span>Epochs</span><input type="number" name="epochs" min="1" value="{{ values.epochs }}"></label>
         <label class="field"><span>Patience</span><input type="number" name="patience" min="0" value="{{ values.patience }}"></label>
         <label class="field"><span>Image size</span><input type="number" name="imgsz" min="32" value="{{ values.imgsz }}"></label>
-        <label class="field"><span>Batch</span><select name="batch"><option value="auto">Auto</option>{% for batch in [1,2,4,8,16,32,64] %}<option value="{{ batch }}" {% if values.batch == batch %}selected{% endif %}>{{ batch }}</option>{% endfor %}</select></label>
+        <label class="field"><span>Batch <small>Enter -1 for AutoBatch on one CUDA GPU. Use a positive integer for CPU or multiple GPUs.</small></span><input type="number" name="batch" min="-1" step="1" value="{{ values.batch }}"></label>
         <label class="field"><span>Workers</span><input type="number" name="workers" min="0" value="{{ values.workers }}"></label>
         <label class="field field-span-2"><span>Run name <small>optional</small></span><input id="run-name" name="run_name" placeholder="experiment-01"></label>
       </div>
@@ -75,10 +82,11 @@
       </div>
       {% endif %}
       <div class="device-grid">
-        <label class="field"><span>Device</span><select name="device_mode" data-device-mode><option value="auto">Auto</option><option value="cpu">CPU</option><option value="single">Single GPU</option><option value="multi">Multiple GPUs</option></select></label>
+        <label class="field"><span>Device</span><select name="device_mode" data-device-mode><option value="auto">Auto</option><option value="cpu">CPU</option>{% if gpu_ids %}<option value="single">Single GPU</option><option value="multi">Multiple GPUs</option>{% endif %}</select></label>
         <label class="field" data-conditional="device_mode:single" hidden><span>GPU</span><select name="single_gpu">{% for gpu in gpu_ids %}<option value="{{ gpu }}">GPU {{ gpu }}</option>{% endfor %}</select></label>
-        <fieldset data-conditional="device_mode:multi" hidden><legend>GPUs</legend>{% for gpu in gpu_ids %}<label class="check-field"><input type="checkbox" name="multi_gpu" value="{{ gpu }}" {% if loop.first %}checked{% endif %}>GPU {{ gpu }}</label>{% else %}<span class="field-hint">No CUDA devices detected</span>{% endfor %}</fieldset>
+        <fieldset data-conditional="device_mode:multi" hidden><legend>GPUs</legend>{% for gpu in gpu_ids %}<label class="check-field"><input type="checkbox" name="multi_gpu" value="{{ gpu }}" {% if loop.first %}checked{% endif %}>GPU {{ gpu }}</label>{% else %}<span class="field-hint">{{ gpu_hint or 'No compatible CUDA devices detected' }}</span>{% endfor %}</fieldset>
       </div>
+      {% if gpu_hint %}<p class="field-hint">{{ gpu_hint }}</p>{% endif %}
     </section>
 
     <details class="expert-settings">

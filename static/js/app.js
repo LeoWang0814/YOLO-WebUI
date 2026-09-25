@@ -89,6 +89,151 @@
     });
   };
 
+  const formatBytes = (value) => {
+    const bytes = Math.max(0, Number(value) || 0);
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    const exponent = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)) - 1);
+    return `${(bytes / (1024 ** (exponent + 1))).toFixed(bytes < 10 * (1024 ** (exponent + 1)) ? 1 : 0)} ${units[exponent]}`;
+  };
+
+  const setDatasetUploadStatus = (zone, state, label, detail, percent = 0) => {
+    const status = zone.querySelector("[data-dataset-upload-status]");
+    if (!status) return;
+    const active = state === "uploading" || state === "saving";
+    status.hidden = false;
+    status.className = `dataset-upload-status ${active ? "is-uploading" : `is-${state}`}`;
+    const title = status.querySelector("[data-dataset-upload-label]");
+    const summary = status.querySelector("[data-dataset-upload-detail]");
+    const track = status.querySelector("[data-dataset-upload-track]");
+    const fill = track?.querySelector("i");
+    if (title) title.textContent = label;
+    if (summary) summary.textContent = detail;
+    if (track) {
+      const bounded = Math.max(0, Math.min(100, Math.round(percent)));
+      track.setAttribute("aria-valuenow", String(bounded));
+      if (fill) fill.style.width = `${bounded}%`;
+    }
+  };
+
+  const setDatasetUploadBusy = (zone, busy) => {
+    zone.classList.toggle("is-uploading", busy);
+    zone.setAttribute("aria-busy", String(busy));
+    const controls = [
+      zone.querySelector("[name='dataset_path']"),
+      zone.closest(".inline-field-action")?.querySelector("[data-dataset-inspect]"),
+      ...document.querySelectorAll("[data-start-run]"),
+    ].filter(Boolean);
+    controls.forEach((control) => {
+      if (busy) {
+        control.dataset.datasetUploadDisabled = String(control.disabled);
+        control.disabled = true;
+      } else if (control.dataset.datasetUploadDisabled !== undefined) {
+        control.disabled = control.dataset.datasetUploadDisabled === "true";
+        delete control.dataset.datasetUploadDisabled;
+      }
+    });
+  };
+
+  const collectDroppedArchive = (dataTransfer) => {
+    const files = [...(dataTransfer.files || [])];
+    if (files.length !== 1) throw new Error(t("Drop one .zip file at a time."));
+    const [archive] = files;
+    if (!archive.name.toLowerCase().endsWith(".zip")) throw new Error(t("Only .zip dataset archives can be dropped here."));
+    return archive;
+  };
+
+  const uploadDatasetArchive = (zone, archive) => {
+    const input = zone.querySelector("[name='dataset_path']");
+    const inspect = zone.closest(".inline-field-action")?.querySelector("[data-dataset-inspect]");
+    if (!input) return;
+    const totalBytes = archive.size;
+    const formData = new FormData();
+    formData.append("dataset_archive", archive, archive.name);
+
+    const xhr = new XMLHttpRequest();
+    let previousLoaded = 0;
+    let previousTime = performance.now();
+    const fail = (message) => {
+      setDatasetUploadBusy(zone, false);
+      setDatasetUploadStatus(zone, "error", t("Uploading dataset…"), message, 0);
+      showFeedback(message);
+    };
+    setDatasetUploadBusy(zone, true);
+    setDatasetUploadStatus(zone, "uploading", t("Uploading dataset…"), `${formatBytes(0)} / ${formatBytes(totalBytes)} · ${t("Calculating speed…")}`, 0);
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      const now = performance.now();
+      const elapsed = Math.max(1, now - previousTime);
+      const speed = Math.max(0, event.loaded - previousLoaded) * 1000 / elapsed;
+      const fileBytes = totalBytes * event.loaded / Math.max(1, event.total);
+      const percent = event.loaded * 100 / Math.max(1, event.total);
+      setDatasetUploadStatus(zone, "uploading", t("Uploading dataset…"), `${formatBytes(fileBytes)} / ${formatBytes(totalBytes)} · ${formatBytes(speed)}/s`, percent);
+      previousLoaded = event.loaded;
+      previousTime = now;
+    });
+    xhr.upload.addEventListener("load", () => {
+      setDatasetUploadStatus(zone, "saving", t("Extracting dataset archive on server…"), formatBytes(totalBytes), 100);
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        fail(responseMessage(xhr));
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(xhr.responseText || "{}");
+      } catch (_) {
+        fail(t("The server could not save this dataset upload."));
+        return;
+      }
+      if (!payload.dataset_path) {
+        fail(t("The server could not save this dataset upload."));
+        return;
+      }
+      input.value = payload.dataset_path;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      setDatasetUploadBusy(zone, false);
+      setDatasetUploadStatus(zone, "success", t("Dataset archive extracted"), `${Number(payload.file_count || 0).toLocaleString()} files · ${formatBytes(payload.total_bytes || 0)} · ${t("Preparing extracted dataset…")}`, 100);
+      inspect?.click();
+    });
+    xhr.addEventListener("error", () => fail(t("The service could not be reached.")));
+    xhr.addEventListener("abort", () => fail(t("Dataset upload was cancelled.")));
+    xhr.open("POST", "/fragments/dataset/upload");
+    xhr.send(formData);
+  };
+
+  const initializeDatasetUploads = (scope = document) => {
+    scope.querySelectorAll("[data-dataset-upload]").forEach((zone) => {
+      if (zone.dataset.bound) return;
+      zone.dataset.bound = "true";
+      zone.addEventListener("click", (event) => {
+        if (zone.getAttribute("aria-busy") !== "true" && !event.target.matches("input")) zone.querySelector("[name='dataset_path']")?.focus();
+      });
+      ["dragenter", "dragover"].forEach((name) => zone.addEventListener(name, (event) => {
+        event.preventDefault();
+        if (zone.getAttribute("aria-busy") !== "true") zone.classList.add("is-dragover");
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      }));
+      zone.addEventListener("dragleave", (event) => {
+        if (!zone.contains(event.relatedTarget)) zone.classList.remove("is-dragover");
+      });
+      zone.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        zone.classList.remove("is-dragover");
+        if (zone.getAttribute("aria-busy") === "true") return;
+        try {
+          uploadDatasetArchive(zone, collectDroppedArchive(event.dataTransfer));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : t("Only .zip dataset archives can be dropped here.");
+          setDatasetUploadStatus(zone, "error", t("Uploading dataset…"), message, 0);
+          showFeedback(message);
+        }
+      });
+    });
+  };
+
   const isLogAtBottom = (output) => output.scrollHeight - output.scrollTop - output.clientHeight <= 8;
 
   const updateLogFollowStatus = (output, following) => {
@@ -535,6 +680,7 @@
     refreshConditionals(scope);
     initializeSearch(scope);
     initializeFileInputs(scope);
+    initializeDatasetUploads(scope);
     initializeLogTerminals();
     initializeRunFilters(scope);
     initializeViewer();

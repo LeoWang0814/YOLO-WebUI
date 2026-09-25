@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -79,9 +80,15 @@ class RunManager:
                     job.stage = "completed"
         except Exception as exc:
             with self._lock:
-                job.error = str(exc)
-                job.stage = "stopped" if job.stop_requested else "failed"
-            self.append_log(job, f"[error] {exc}")
+                stopped = job.stop_requested
+                if stopped:
+                    job.error = None
+                    job.stage = "stopped"
+                else:
+                    job.error = str(exc)
+                    job.stage = "failed"
+            if not stopped:
+                self.append_log(job, f"[error] {exc}")
         finally:
             with self._lock:
                 job.process = None
@@ -107,8 +114,47 @@ class RunManager:
         with (job.run_dir / "run.log").open("a", encoding="utf-8", errors="replace") as output:
             output.write(f"{line}\n")
 
+    def is_stop_requested(self, job: RunJob) -> bool:
+        with self._lock:
+            return job.stop_requested
+
+    @staticmethod
+    def _terminate_process_tree(process: subprocess.Popen) -> None:
+        """Immediately stop a command and every process it spawned."""
+        if process.poll() is not None:
+            return
+
+        if os.name == "nt":
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                return
+            except OSError:
+                pass
+        else:
+            try:
+                process_group = os.getpgid(process.pid)
+                os.killpg(process_group, signal.SIGTERM)
+                os.killpg(process_group, signal.SIGKILL)
+                return
+            except (OSError, ProcessLookupError):
+                pass
+
+        try:
+            process.kill()
+        except OSError:
+            pass
+
     def run_command(self, job: RunJob, command: List[str], cwd: Path) -> int:
         self.set_stage(job, "running")
+        if self.is_stop_requested(job):
+            job.returncode = -signal.SIGTERM
+            self.append_log(job, "[status] Stopped before launching the Ultralytics process.")
+            return job.returncode
         self.append_log(job, "$ " + " ".join(command))
         execution_command = list(command)
         if execution_command and execution_command[0] == "yolo":
@@ -118,6 +164,11 @@ class RunManager:
         env = os.environ.copy()
         env.setdefault("PYTHONUNBUFFERED", "1")
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        process_options: Dict[str, Any] = {}
+        if os.name == "nt":
+            process_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            process_options["start_new_session"] = True
         process = subprocess.Popen(
             execution_command,
             cwd=str(cwd),
@@ -128,14 +179,18 @@ class RunManager:
             errors="replace",
             bufsize=1,
             env=env,
+            **process_options,
         )
         with self._lock:
             job.process = process
+            stop_requested = job.stop_requested
+        if stop_requested:
+            self._terminate_process_tree(process)
         assert process.stdout is not None
         for line in process.stdout:
             self.append_log(job, line)
             if job.stop_requested and process.poll() is None:
-                process.terminate()
+                self._terminate_process_tree(process)
         job.returncode = process.wait()
         return job.returncode
 
@@ -149,8 +204,8 @@ class RunManager:
             job.stage = "stopping"
             process = job.process
         if process and process.poll() is None:
-            process.terminate()
-        self.append_log(job, "[status] Stop requested by user.")
+            self._terminate_process_tree(process)
+        self.append_log(job, "[status] Stop requested by user; terminating the process tree.")
         return job
 
     def get(self, job_id: str) -> Optional[RunJob]:

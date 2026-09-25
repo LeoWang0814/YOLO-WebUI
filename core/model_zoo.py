@@ -5,7 +5,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
@@ -13,6 +13,8 @@ from threading import Lock
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from core.download_sources import preferred_model_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,14 +70,28 @@ def _env_int(name: str, default: int, min_value: int = 1, max_value: int = 32) -
     return max(min_value, min(max_value, value))
 
 
+class DownloadCancelled(RuntimeError):
+    pass
+
+
+def _raise_if_cancelled(cancelled: Optional[Callable[[], bool]]) -> None:
+    if cancelled and cancelled():
+        raise DownloadCancelled("Model download was cancelled.")
+
+
 def _source_urls(zoo: Dict, meta: Dict) -> List[str]:
-    sources = meta.get("sources", {})
+    sources = {name: url for name, url in meta.get("sources", {}).items() if isinstance(url, str) and url}
     if not sources:
         return []
-    github_url = sources.get("github")
-    if not github_url:
-        return []
-    return [github_url]
+    default_source = str(zoo.get("default_source") or "github")
+    preferred_source = preferred_model_source() if "nanoberry" in sources else default_source
+    source_names = [preferred_source, default_source, *sources]
+    urls = []
+    for source_name in source_names:
+        url = sources.get(source_name)
+        if url and url not in urls:
+            urls.append(url)
+    return urls
 
 
 def _probe_download(session: requests.Session, url: str) -> Tuple[int, bool]:
@@ -126,6 +142,7 @@ def _download_single(
     tmp_path: Path,
     total: int,
     progress=None,
+    cancelled: Optional[Callable[[], bool]] = None,
 ) -> None:
     headers = {}
     downloaded = 0
@@ -145,6 +162,7 @@ def _download_single(
         mode = "ab" if headers else "wb"
         with tmp_path.open(mode) as f:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
+                _raise_if_cancelled(cancelled)
                 if not chunk:
                     continue
                 f.write(chunk)
@@ -158,12 +176,13 @@ def _download_parallel(
     tmp_path: Path,
     total: int,
     progress=None,
+    cancelled: Optional[Callable[[], bool]] = None,
 ) -> None:
     min_part_size = _env_int("YOLOV10_DOWNLOAD_MIN_PART_MB", 8, min_value=1, max_value=128) * 1024 * 1024
     max_workers = _env_int("YOLOV10_DOWNLOAD_WORKERS", 4, min_value=1, max_value=8)
     workers = min(max_workers, max(1, total // min_part_size))
     if workers <= 1:
-        _download_single(session, url, tmp_path, total, progress)
+        _download_single(session, url, tmp_path, total, progress, cancelled)
         return
 
     part_size = math.ceil(total / workers)
@@ -200,6 +219,7 @@ def _download_parallel(
             response.raise_for_status()
             with part_path.open("ab") as f:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    _raise_if_cancelled(cancelled)
                     if not chunk:
                         continue
                     f.write(chunk)
@@ -283,7 +303,7 @@ def is_model_cached(model_key: str) -> bool:
     return _is_cached(weights_path, meta["sha256"])
 
 
-def ensure_model(model_key: str, progress=None) -> Path:
+def ensure_model(model_key: str, progress=None, cancelled: Optional[Callable[[], bool]] = None) -> Path:
     zoo = _load_zoo()
     release_key = _latest_release_key(zoo)
     models = zoo["releases"][release_key]["models"]
@@ -294,6 +314,7 @@ def ensure_model(model_key: str, progress=None) -> Path:
     weights_dir.mkdir(parents=True, exist_ok=True)
     weights_path = weights_dir / meta["filename"]
 
+    _raise_if_cancelled(cancelled)
     if _is_cached(weights_path, meta["sha256"]):
         return weights_path
 
@@ -305,20 +326,23 @@ def ensure_model(model_key: str, progress=None) -> Path:
     last_error = None
     for url in urls:
         try:
+            _raise_if_cancelled(cancelled)
             total, accept_ranges = _probe_download(session, url)
+            _raise_if_cancelled(cancelled)
             if tmp_path.exists() and not total:
                 tmp_path.unlink()
             if accept_ranges and total:
                 try:
-                    _download_parallel(session, url, tmp_path, total, progress)
+                    _download_parallel(session, url, tmp_path, total, progress, cancelled)
                 except ValueError as exc:
                     if "range" in str(exc).lower():
                         _cleanup_parts(tmp_path)
-                        _download_single(session, url, tmp_path, total, progress)
+                        _download_single(session, url, tmp_path, total, progress, cancelled)
                     else:
                         raise
             else:
-                _download_single(session, url, tmp_path, total, progress)
+                _download_single(session, url, tmp_path, total, progress, cancelled)
+            _raise_if_cancelled(cancelled)
             if progress is not None:
                 progress(1.0, desc="Verifying model checksum...")
             actual = _hash_file(tmp_path)
@@ -328,6 +352,9 @@ def ensure_model(model_key: str, progress=None) -> Path:
             if progress is not None:
                 progress(1.0, desc="Model cached.")
             return weights_path
+        except DownloadCancelled:
+            _cleanup_parts(tmp_path)
+            raise
         except Exception as exc:
             last_error = exc
             continue

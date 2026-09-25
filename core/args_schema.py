@@ -4,36 +4,6 @@ from ultralytics.cfg import DEFAULT_CFG_DICT, smart_value
 
 
 TRAIN_GROUPS = {
-    "Core": [
-        "task",
-        "mode",
-        "data",
-        "model",
-        "epochs",
-        "time",
-        "patience",
-        "batch",
-        "imgsz",
-        "device",
-        "workers",
-        "project",
-        "name",
-        "exist_ok",
-        "pretrained",
-        "seed",
-        "deterministic",
-        "single_cls",
-        "rect",
-        "resume",
-        "amp",
-        "fraction",
-        "cache",
-        "save",
-        "save_period",
-        "val",
-        "val_period",
-        "verbose",
-    ],
     "Optimizer": [
         "optimizer",
         "lr0",
@@ -60,17 +30,23 @@ TRAIN_GROUPS = {
         "bgr",
         "mosaic",
         "mixup",
-        "copy_paste",
-        "auto_augment",
-        "erasing",
-        "crop_fraction",
         "close_mosaic",
         "multi_scale",
-        "overlap_mask",
-        "mask_ratio",
-        "dropout",
     ],
-    "Validation / Logging": [
+    "Training behavior": [
+        "seed",
+        "deterministic",
+        "single_cls",
+        "rect",
+        "amp",
+        "fraction",
+        "cache",
+        "freeze",
+        "profile",
+    ],
+    "Validation": [
+        "save_period",
+        "val_period",
         "plots",
         "save_json",
         "save_hybrid",
@@ -78,59 +54,30 @@ TRAIN_GROUPS = {
         "iou",
         "max_det",
         "half",
-        "dnn",
-        "save_txt",
-        "save_conf",
-        "save_crop",
-        "show_labels",
-        "show_conf",
-        "show_boxes",
-        "line_width",
-    ],
-    "Performance": [
-        "profile",
-        "device",
-        "workers",
-        "batch",
-        "imgsz",
-        "half",
-        "amp",
     ],
 }
 
 PREDICT_GROUPS = {
-    "Core": [
-        "task",
-        "mode",
-        "model",
-        "source",
-        "imgsz",
-        "conf",
-        "iou",
-        "device",
+    "Inference": [
         "half",
         "max_det",
         "batch",
-    ],
-    "Output": [
-        "save",
-        "save_txt",
-        "save_conf",
-        "save_crop",
-        "show",
-        "show_labels",
-        "show_conf",
-        "show_boxes",
-        "line_width",
-    ],
-    "Performance": [
         "vid_stride",
         "stream_buffer",
         "visualize",
         "augment",
         "agnostic_nms",
         "classes",
-        "retina_masks",
+    ],
+    "Output": [
+        "save_frames",
+        "save_txt",
+        "save_conf",
+        "save_crop",
+        "show_labels",
+        "show_conf",
+        "show_boxes",
+        "line_width",
     ],
 }
 
@@ -145,17 +92,13 @@ def build_grouped_defaults(mode: str) -> Dict[str, Dict[str, Any]]:
     cfg = default_cfg_dict()
     groups = TRAIN_GROUPS if mode == "train" else PREDICT_GROUPS
     grouped: Dict[str, Dict[str, Any]] = {}
-    used = set()
     for group_name, keys in groups.items():
         group_items = {}
         for key in keys:
             if key in cfg:
                 group_items[key] = cfg[key]
-                used.add(key)
-        grouped[group_name] = group_items
-    other = {k: v for k, v in cfg.items() if k not in used}
-    if other:
-        grouped["Other"] = other
+        if group_items:
+            grouped[group_name] = group_items
     return grouped
 
 

@@ -1,2 +1,6 @@
-# Legacy compatibility alias. Use requirements.txt for new installations.
+# NVIDIA CUDA 11.8 runtime for pre-Blackwell systems.
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.7.1+cu118
+torchvision==0.22.1+cu118
+
 -r requirements.txt

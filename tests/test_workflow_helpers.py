@@ -1,5 +1,9 @@
+import io
+import os
+import signal
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -8,7 +12,7 @@ from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
 import app
-from core import workflows
+from core import download_sources, gpu, model_zoo, runner, workflows
 from core.runner import RunConflictError, RunJob, RunManager
 from web.forms import expert_groups, expert_values
 from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_page, docs_search_index, docs_slugs, parameter_docs
@@ -72,6 +76,81 @@ def test_uploaded_models_receive_collision_safe_names(tmp_path, monkeypatch):
     assert second.read_bytes() == b"weights"
 
 
+def _dataset_archive(entries):
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as output:
+        for name, content in entries.items():
+            output.writestr(name, content)
+    archive.seek(0)
+    return archive
+
+
+def test_uploaded_dataset_archive_preserves_nested_folder_layout(tmp_path, monkeypatch, client):
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(workflows, "DATASET_UPLOADS_ROOT", upload_root)
+    archive = _dataset_archive(
+        {
+            "my-dataset/train/images/image.jpg": b"image",
+            "my-dataset/train/labels/labels.txt": b"0 0.5 0.5 0.5 0.5",
+        }
+    )
+
+    response = client.post(
+        "/fragments/dataset/upload",
+        files={"dataset_archive": ("my-dataset.zip", archive.getvalue(), "application/zip")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    saved = Path(payload["dataset_path"])
+    assert saved.parent == upload_root
+    assert payload["folder_name"] == "my-dataset"
+    assert payload["file_count"] == 2
+    assert payload["total_bytes"] == len(b"image") + len(b"0 0.5 0.5 0.5 0.5")
+    assert (saved / "train" / "images" / "image.jpg").read_bytes() == b"image"
+    assert (saved / "train" / "labels" / "labels.txt").read_bytes() == b"0 0.5 0.5 0.5 0.5"
+
+
+def test_uploaded_dataset_archive_rejects_paths_outside_its_folder(tmp_path, monkeypatch, client):
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(workflows, "DATASET_UPLOADS_ROOT", upload_root)
+    archive = _dataset_archive({"../outside/image.jpg": b"image"})
+
+    response = client.post(
+        "/fragments/dataset/upload",
+        files={"dataset_archive": ("my-dataset.zip", archive.getvalue(), "application/zip")},
+    )
+
+    assert response.status_code == 422
+    assert upload_root.is_dir()
+    assert list(upload_root.iterdir()) == []
+
+
+def test_invalid_dataset_archive_is_rejected_and_cleans_its_temporary_directory(tmp_path, monkeypatch, client):
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(workflows, "DATASET_UPLOADS_ROOT", upload_root)
+
+    response = client.post(
+        "/fragments/dataset/upload",
+        files={"dataset_archive": ("broken.zip", b"not a ZIP archive", "application/zip")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "The uploaded file is not a valid ZIP archive."
+    assert upload_root.is_dir()
+    assert list(upload_root.iterdir()) == []
+
+
+def test_dataset_upload_rejects_non_zip_files(client):
+    response = client.post(
+        "/fragments/dataset/upload",
+        files={"dataset_archive": ("dataset.tar", b"archive", "application/x-tar")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Only .zip dataset archives are supported."
+
+
 @pytest.mark.parametrize("source_type", ["images", "video", "path"])
 def test_prediction_source_modes_remain_supported(tmp_path, source_type):
     run_dir = tmp_path / "predict"
@@ -98,6 +177,51 @@ def test_expert_controls_exclude_overridden_fields_and_coerce_values():
     values = expert_values("train", FormData([("expert__amp", "true"), ("expert__lr0", "0.02")]))
     assert values["amp"] is True
     assert values["lr0"] == 0.02
+
+
+def test_expert_controls_only_expose_detect_train_and_predict_settings():
+    train_fields = {key for _, fields in expert_groups("train") for key, _ in fields}
+    predict_fields = {key for _, fields in expert_groups("predict") for key, _ in fields}
+
+    assert not train_fields.intersection({"copy_paste", "auto_augment", "erasing", "crop_fraction", "mask_ratio", "overlap_mask", "dropout", "pose", "kobj", "format", "tracker"})
+    assert not predict_fields.intersection({"dnn", "retina_masks", "embed", "crop_fraction", "tracker", "format"})
+    assert {group for group, _ in expert_groups("train")} == {"Optimizer", "Augmentation", "Training behavior", "Validation"}
+    assert {group for group, _ in expert_groups("predict")} == {"Inference", "Output"}
+
+
+def test_gpu_architecture_report_rejects_an_unsupported_wheel(monkeypatch):
+    class Properties:
+        major = 12
+        minor = 0
+        name = "NVIDIA GeForce RTX 5090"
+        total_memory = 32 * 1024**3
+
+    monkeypatch.setattr(gpu.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(gpu.torch.cuda, "get_arch_list", lambda: ["sm_90"])
+    monkeypatch.setattr(gpu.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(gpu.torch.cuda, "get_device_properties", lambda index: Properties())
+
+    report = gpu.cuda_device_report()
+
+    assert report["compatible"] == []
+    assert report["incompatible"][0]["capability"] == "sm_120"
+    assert "requirements-cuda128.txt" in gpu.cuda_runtime_error()
+
+
+def test_gpu_architecture_report_accepts_a_matching_wheel(monkeypatch):
+    class Properties:
+        major = 12
+        minor = 0
+        name = "NVIDIA GeForce RTX 5090"
+        total_memory = 32 * 1024**3
+
+    monkeypatch.setattr(gpu.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(gpu.torch.cuda, "get_arch_list", lambda: ["sm_90", "sm_120"])
+    monkeypatch.setattr(gpu.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(gpu.torch.cuda, "get_device_properties", lambda index: Properties())
+
+    assert gpu.compatible_cuda_device_ids() == ["0"]
+    assert gpu.cuda_runtime_error() == ""
 
 
 def test_metrics_snapshot_reports_epoch_metrics(tmp_path):
@@ -182,6 +306,99 @@ def test_run_manager_rejects_parallel_processes(tmp_path):
     assert first.stage == "stopped"
 
 
+def test_stop_terminates_the_entire_posix_process_group(tmp_path, monkeypatch):
+    if os.name == "nt":
+        pytest.skip("POSIX process groups are covered on POSIX hosts.")
+
+    class RunningProcess:
+        pid = 1234
+
+        @staticmethod
+        def poll():
+            return None
+
+    signals = []
+    monkeypatch.setattr(runner.os, "getpgid", lambda pid: 4321)
+    monkeypatch.setattr(runner.os, "killpg", lambda process_group, event: signals.append((process_group, event)))
+    manager = RunManager()
+    job = RunJob(id="tree", kind="train", run_dir=tmp_path / "tree", stage="running", process=RunningProcess())
+    manager._jobs[job.id] = job
+    manager._active_id = job.id
+
+    stopped = manager.stop(job.id)
+
+    assert stopped is job
+    assert job.stop_requested is True
+    assert job.stage == "stopping"
+    assert signals == [(4321, signal.SIGTERM), (4321, signal.SIGKILL)]
+
+
+def test_run_command_creates_an_isolated_process_group(tmp_path, monkeypatch):
+    options = {}
+
+    class CompletedProcess:
+        pid = 1234
+        stdout = io.StringIO("")
+
+        @staticmethod
+        def poll():
+            return 0
+
+        @staticmethod
+        def wait():
+            return 0
+
+    def fake_popen(*args, **kwargs):
+        options.update(kwargs)
+        return CompletedProcess()
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+    manager = RunManager()
+    job = RunJob(id="isolated", kind="train", run_dir=tmp_path / "isolated")
+
+    assert manager.run_command(job, ["yolo", "detect", "train"], tmp_path) == 0
+    if os.name == "nt":
+        assert options["creationflags"] == runner.subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        assert options["start_new_session"] is True
+
+
+def test_cancelled_model_resolution_does_not_launch_a_process(tmp_path):
+    manager = RunManager()
+    job = RunJob(id="cancelled", kind="train", run_dir=tmp_path / "cancelled", stop_requested=True)
+
+    assert manager.run_command(job, ["yolo", "detect", "train"], tmp_path) == -signal.SIGTERM
+    assert job.returncode == -signal.SIGTERM
+
+
+def test_china_cidr_data_covers_ipv4_and_ipv6_ranges():
+    assert download_sources.is_mainland_china_ip("1.0.1.1") is True
+    assert download_sources.is_mainland_china_ip("2001:250::1") is True
+    assert download_sources.is_mainland_china_ip("8.8.8.8") is False
+
+
+def test_egress_source_selection_and_download_fallback_order(monkeypatch):
+    monkeypatch.setattr(download_sources, "_cached_source", None)
+    monkeypatch.setattr(download_sources, "_public_egress_ip", lambda: "1.0.1.1")
+    assert download_sources.preferred_model_source() == "nanoberry"
+
+    monkeypatch.setattr(download_sources, "_cached_source", None)
+    monkeypatch.setattr(download_sources, "_public_egress_ip", lambda: "8.8.8.8")
+    assert download_sources.preferred_model_source() == "github"
+
+    zoo = {"default_source": "github"}
+    meta = {"sources": {"github": "https://github.example/model.pt", "nanoberry": "https://nanoberry.example/model.pt"}}
+    monkeypatch.setattr(model_zoo, "preferred_model_source", lambda: "nanoberry")
+    assert model_zoo._source_urls(zoo, meta) == ["https://nanoberry.example/model.pt", "https://github.example/model.pt"]
+    monkeypatch.setattr(model_zoo, "preferred_model_source", lambda: "github")
+    assert model_zoo._source_urls(zoo, meta) == ["https://github.example/model.pt", "https://nanoberry.example/model.pt"]
+
+
+def test_cancelled_model_download_stops_before_network_access():
+    with pytest.raises(model_zoo.DownloadCancelled):
+        model_zoo.ensure_model("yolov8n", cancelled=lambda: True)
+
+
 @pytest.fixture
 def client():
     return TestClient(app.app)
@@ -246,11 +463,17 @@ def test_fastapi_renders_workbench_and_htmx_preview(client):
     assert '/static/js/i18n.js?v=' in page.text
     train = client.get("/?operation=train")
     assert 'name="dataset_path"' in train.text
+    assert 'data-dataset-upload' in train.text
+    assert 'data-dataset-inspect' in train.text
+    assert 'Drop one .zip dataset archive here to upload from this browser.' in train.text
     assert "/docs/datasets#supported-formats" in train.text
     assert 'class="dataset-doc-link" href="/docs/datasets#supported-formats" target="_blank" rel="noopener"' in train.text
     assert 'id="dataset-progress"' in train.text
     assert 'hx-indicator="#dataset-progress"' in train.text
     assert 'hx-trigger="input changed delay:700ms, blur"' not in train.text
+    assert '<input type="number" name="batch" min="-1" step="1" value="-1">' in train.text
+    assert 'select name="batch"' not in train.text
+    assert "Enter -1 for AutoBatch on one CUDA GPU" in train.text
     assert 'href="/?operation=train" aria-label="YOLOv10 Workbench home"' not in page.text
 
 
@@ -424,6 +647,18 @@ def test_completed_run_inspector_has_open_and_new_actions(tmp_path, monkeypatch,
     assert "New prediction" in response.text
 
 
+def test_stopping_run_inspector_disables_repeated_stop_requests(tmp_path, monkeypatch, client):
+    job = RunJob(id="stopping", kind="train", run_dir=tmp_path / "train" / "stopping", stage="stopping")
+    monkeypatch.setattr(app, "run_manager", PassiveRunManager(job=job))
+
+    response = client.get("/fragments/jobs/stopping/inspector", headers={"HX-Request": "true"})
+
+    assert response.status_code == 200
+    assert "Stopping" in response.text
+    assert 'hx-post="/runs/stopping/stop"' not in response.text
+    assert "disabled" in response.text
+
+
 def test_start_validation_is_visible_and_does_not_create_run(tmp_path, monkeypatch, client):
     runs_root = tmp_path / "runs"
     monkeypatch.setattr(workflows, "RUNS_ROOT", runs_root)
@@ -451,8 +686,38 @@ def test_explicit_gpu_without_device_has_visible_error(tmp_path, monkeypatch, cl
     )
 
     assert response.status_code == 422
-    assert "Select a GPU" in response.text
-    assert not (runs_root / "predict").exists()
+    assert "Select a compatible CUDA GPU" in response.text
+
+
+def test_batch_validation_rejects_zero_and_multi_gpu_autobatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "device_value", lambda *args: "0,1")
+    monkeypatch.setattr(app, "device_choices", lambda: ["0", "1"])
+    run_dir = tmp_path / "runs" / "train" / "demo"
+
+    with pytest.raises(ValueError, match=r"AutoBatch \(-1\)"):
+        app._build_args(
+            FormData([("device_mode", "multi"), ("multi_gpu", "0"), ("multi_gpu", "1"), ("batch", "-1")]),
+            "train",
+            run_dir,
+            "weights.pt",
+            dataset_data="data.yaml",
+        )
+    with pytest.raises(ValueError, match="Batch must be -1"):
+        app._build_args(
+            FormData([("device_mode", "cpu"), ("batch", "0")]),
+            "train",
+            run_dir,
+            "weights.pt",
+            dataset_data="data.yaml",
+        )
+    with pytest.raises(ValueError, match="Rectangular training"):
+        app._build_args(
+            FormData([("device_mode", "multi"), ("multi_gpu", "0"), ("multi_gpu", "1"), ("batch", "16"), ("expert__rect", "true")]),
+            "train",
+            run_dir,
+            "weights.pt",
+            dataset_data="data.yaml",
+        )
 
 
 def test_run_conflict_removes_unstarted_directory(tmp_path, monkeypatch, client):

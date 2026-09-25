@@ -26,7 +26,7 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 
 ## Highlights
 
-- **Dataset-first training:** inspect one local folder, identify a supported detection format, validate it, and prepare a strict YOLO Detect cache without changing the source files.
+- **Dataset-first training:** enter a server-local folder or drag one `.zip` dataset archive into Train, then identify a supported detection format, validate it, and prepare a strict YOLO Detect cache.
 - **Practical model handling:** choose a pretrained model with verified local caching, or use a local `.pt` file or upload.
 - **Focused prediction:** run on image uploads, a video upload, or a local path. URL sources are intentionally not supported.
 - **Visible run lifecycle:** one managed run at a time, with live status, command preview, logs, charts, weights, media previews, and a searchable run history.
@@ -55,7 +55,7 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 ## Quick start
 
 > [!NOTE]
-> Dependency files do not force a download source. Configure your preferred pip mirror before the install command when needed.
+> Choose the PyTorch runtime file that matches the target hardware. The CUDA 12.8 file is required for NVIDIA Blackwell GPUs such as RTX 50-series.
 
 ### NVIDIA GPU
 
@@ -67,14 +67,20 @@ conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
-pip install -r requirements.txt
+pip install -r requirements-cuda128.txt
 pip install -e .
 
-python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.device_count())"
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list(), torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-The check should show a CUDA version, `True`, and the detected GPU count. Then open [http://127.0.0.1:7860](http://127.0.0.1:7860).
+The check should show CUDA `12.8`, an architecture list containing your GPU architecture (for RTX 50-series, `sm_120`), `True`, and the detected GPU count. If `nvidia-smi` sees a GPU but this check returns `False`, run the detailed preflight report:
+
+```bash
+python tools/check_cuda.py
+```
+
+For older NVIDIA drivers or CUDA 11.8 systems, use `requirements-cuda118.txt` instead. When using Docker, launch the image with the NVIDIA runtime and pass the assigned GPUs through (`--gpus all` or `--gpus '"device=0,1"'`). The image requests both `compute` and `utility` driver capabilities; omitting `compute` can leave `nvidia-smi` working while `cuInit()` returns `CUDA_ERROR_UNKNOWN (999)`. A container where this still happens has a host/container driver-runtime problem; reinstalling Python packages inside that container cannot repair it. Recreate the container with the NVIDIA runtime or repair the host `nvidia_uvm` module and device mapping first. Then open [http://127.0.0.1:7860](http://127.0.0.1:7860).
 
 ### CPU
 
@@ -86,7 +92,7 @@ conda init
 conda create -n yolov10 python=3.10
 conda activate yolov10
 
-pip install -r requirements.txt
+pip install -r requirements-cpu.txt
 pip install -e .
 
 python app.py
@@ -117,7 +123,7 @@ python app.py
 
 ## First workflow
 
-1. Open **Train** and enter the folder containing your images and annotations.
+1. Open **Train** and enter the server-local folder containing your images and annotations, or drag one local `.zip` dataset archive into the same field to upload and extract it on the Workbench host.
 2. Select **Inspect**. The Workbench identifies the dataset format, validates records, and prepares a cache only when strict conversion is possible.
 3. Select a pretrained model or provide a local `.pt` model. Configure the main training fields and review the generated command.
 4. Start training. Watch live progress and logs; outputs are stored under `runs/train/`.
@@ -137,6 +143,7 @@ Only one managed Ultralytics training or prediction process can run at a time. T
 | `runs/` | Generated train and predict artifacts (not committed) |
 | `weights/` | Downloaded pretrained model cache (not committed) |
 | `models/` | User-supplied local model uploads (not committed) |
+| `datasets/uploads/` | Persistent dataset folders extracted from browser-uploaded ZIP archives (not committed) |
 
 ## Development
 

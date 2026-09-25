@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from plotly.offline import get_plotlyjs
+from starlette.concurrency import run_in_threadpool
 
-from core.gpu import get_system_status
+from core.gpu import cuda_runtime_error, get_system_status
 from core.dataset_jobs import DatasetPreparationManager
 from core.datasets import FORMAT_CATALOG, prepared_dataset
 from core.runner import RunConflictError, RunJob, RunManager, build_command, write_run_metadata
@@ -37,6 +38,7 @@ from core.workflows import (
     run_has_content,
     run_progress,
     run_metadata,
+    save_uploaded_dataset_archive,
     save_uploaded_model,
     stage_upload,
 )
@@ -87,7 +89,7 @@ def _defaults(operation: str) -> Dict[str, Any]:
             "epochs": 100,
             "patience": 50,
             "imgsz": 640,
-            "batch": "auto",
+            "batch": -1,
             "workers": 8,
         }
     return {"pretrained_model": "yolov8n", "conf": 0.25, "iou": 0.7, "imgsz": 640}
@@ -106,6 +108,7 @@ def _page_context(request: Request, operation: str) -> Dict[str, Any]:
         "model_choices": model_choices,
         "model_hint": model_hint(values["pretrained_model"]),
         "gpu_ids": device_choices(),
+        "gpu_hint": cuda_runtime_error(),
         "expert_groups": expert_groups(operation),
         "form_control": form_control,
         "active_job": active_job,
@@ -183,10 +186,21 @@ def _validate_source_form(form: Any) -> None:
 
 def _build_args(form: Any, operation: str, run_dir: Path, model_path: str, source: Optional[str] = None, dataset_data: Optional[str] = None) -> Dict[str, Any]:
     args = expert_values(operation, form)
-    device = device_value(str(form.get("device_mode") or "auto"), form.get("single_gpu"), form_list(form, "multi_gpu"))
+    device_mode = str(form.get("device_mode") or "auto")
+    selected_multi_gpus = form_list(form, "multi_gpu")
+    device = device_value(device_mode, form.get("single_gpu"), selected_multi_gpus)
     if operation == "train":
-        batch_raw = str(form.get("batch") or "auto")
-        batch = -1 if batch_raw == "auto" else integer(form, "batch", "Batch", 1)
+        batch = integer(form, "batch", "Batch", -1)
+        if batch == 0:
+            raise ValueError("Batch must be -1 for AutoBatch or a positive integer.")
+        if batch == -1 and (
+            device_mode == "cpu"
+            or (device_mode == "multi" and len(selected_multi_gpus) > 1)
+            or (device_mode in {"auto", ""} and not device_choices())
+        ):
+            raise ValueError("AutoBatch (-1) works only with one CUDA GPU. Enter a positive batch size for CPU or multiple GPUs.")
+        if device_mode == "multi" and len(selected_multi_gpus) > 1 and args.get("rect"):
+            raise ValueError("Rectangular training is not supported with multiple GPUs. Disable rect before starting the run.")
         args.update(
             {
                 "data": dataset_data or str(form.get("data_path") or "<prepare a dataset folder>"),
@@ -244,6 +258,8 @@ def _run_worker(job: RunJob, manager: RunManager, operation: str, args: Dict[str
     )
 
     def progress(_: float, desc: str = "") -> None:
+        if manager.is_stop_requested(job):
+            raise RuntimeError("Run was stopped by the user.")
         percent = max(0, min(100, int(round(_ * 100))))
         phase = desc or "Downloading model..."
         is_terminal = phase.lower().startswith(("verifying", "model cached"))
@@ -257,7 +273,16 @@ def _run_worker(job: RunJob, manager: RunManager, operation: str, args: Dict[str
         if desc:
             manager.append_log(job, f"[download] {desc}")
 
-    model_path = resolve_model_path(model_source, pretrained_model, local_model, progress=progress)
+    model_path = resolve_model_path(
+        model_source,
+        pretrained_model,
+        local_model,
+        progress=progress,
+        cancelled=lambda: manager.is_stop_requested(job),
+    )
+    if manager.is_stop_requested(job):
+        manager.append_log(job, "[status] Stopped before launching the Ultralytics process.")
+        return
     manager.update_details(job, download_active=False, download_percent=100, download_phase="Model ready", download_indeterminate=False)
     args["model"] = str(model_path)
     command, preview = build_command("detect", operation, args)
@@ -378,6 +403,27 @@ async def upload_model_fragment(request: Request):
     except ValueError as exc:
         return _template(request, "fragments/upload_feedback.html", status_code=422, message=str(exc), success=False)
     return _template(request, "fragments/model_upload.html", model_path=model_path)
+
+
+@app.post("/fragments/dataset/upload")
+async def upload_dataset_fragment(request: Request):
+    """Extract one browser-uploaded dataset archive before preparation."""
+    archive: Any = None
+    try:
+        form = await request.form(max_files=1, max_fields=8)
+        archive = form.get("dataset_archive")
+        if not getattr(archive, "filename", None) or not hasattr(archive, "file"):
+            raise ValueError("Drop one .zip dataset archive to upload.")
+        result = await run_in_threadpool(save_uploaded_dataset_archive, archive.filename, archive.file)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    except OSError:
+        return JSONResponse({"detail": "The server could not save this dataset upload."}, status_code=507)
+    finally:
+        close = getattr(archive, "close", None)
+        if close:
+            await close()
+    return JSONResponse(result)
 
 
 @app.post("/fragments/dataset/prepare")

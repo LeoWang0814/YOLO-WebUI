@@ -1,9 +1,10 @@
 # YOLO-WebUI runtime dependencies.
 #
-# No package index is forced: pip uses the user's configured source or mirror.
-# Select a PyTorch build appropriate for the target system when using a GPU.
-torch==2.7.1
-torchvision==0.22.1
+# This file contains packages shared by every runtime. Install one of the
+# hardware-specific PyTorch requirement files before it:
+#   requirements-cuda128.txt for NVIDIA CUDA 12.8 / Blackwell GPUs
+#   requirements-cuda118.txt for older NVIDIA CUDA 11.8 environments
+#   requirements-cpu.txt for CPU-only installations
 
 # Web application
 fastapi==0.139.2

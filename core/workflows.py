@@ -6,9 +6,13 @@ import html
 import json
 import re
 import shutil
+import stat
 import subprocess
+import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Tuple
 
 import cv2
@@ -16,11 +20,13 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from core.model_zoo import ensure_model, is_model_cached, model_choices
+from core.gpu import compatible_cuda_device_ids, cuda_runtime_error
 from core.runner import RunJob
 
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS_ROOT = ROOT / "runs"
+DATASET_UPLOADS_ROOT = ROOT / "datasets" / "uploads"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
@@ -47,13 +53,14 @@ def resolve_model_path(
     pretrained_choice: Optional[str],
     local_path: Optional[str],
     progress=None,
+    cancelled=None,
 ) -> Path:
     if source_kind == "pretrained":
         choices, metadata = model_catalog()
         key = pretrained_choice if pretrained_choice in metadata else choices.get(pretrained_choice or "")
         if not key:
             raise ValueError("Select a pretrained model.")
-        return ensure_model(key, progress=progress)
+        return ensure_model(key, progress=progress, cancelled=cancelled)
     if not local_path:
         raise ValueError("Provide a local .pt model path or upload a model.")
     path = Path(local_path)
@@ -65,30 +72,31 @@ def resolve_model_path(
 
 
 def device_choices() -> List[str]:
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            return [str(index) for index in range(torch.cuda.device_count())]
-    except Exception:
-        pass
-    return []
+    return compatible_cuda_device_ids()
 
 
 def device_value(mode: str, single_gpu: Optional[str], multi_gpu: Iterable[str]) -> Optional[str]:
+    compatible = device_choices()
+    compatibility_error = cuda_runtime_error()
     if mode == "cpu":
         return "cpu"
     if mode == "single":
         if not single_gpu:
-            raise ValueError("Select a GPU. No CUDA devices may be available.")
-        return single_gpu
+            raise ValueError("Select a compatible CUDA GPU.")
+        if str(single_gpu) not in compatible:
+            raise ValueError(compatibility_error or "Select a compatible CUDA GPU.")
+        return str(single_gpu)
     if mode == "multi":
         values = [str(value) for value in multi_gpu if str(value).strip()]
         if not values:
-            raise ValueError("Select at least one GPU.")
+            raise ValueError("Select at least one compatible CUDA GPU.")
+        if any(value not in compatible for value in values):
+            raise ValueError(compatibility_error or "Select only compatible CUDA GPUs.")
         return ",".join(values)
     if mode not in {"auto", ""}:
         raise ValueError("Invalid device selection.")
+    if compatibility_error:
+        raise ValueError(compatibility_error)
     return None
 
 
@@ -163,6 +171,116 @@ def stage_upload(filename: str, stream: BinaryIO, run_dir: Path) -> Path:
     with destination.open("wb") as target:
         shutil.copyfileobj(stream, target)
     return destination.resolve()
+
+
+def _uploaded_dataset_relative_path(value: str) -> Path:
+    """Return a safe, portable relative path supplied by a dataset archive."""
+    raw = str(value or "").strip().replace("\\", "/")
+    candidate = PurePosixPath(raw)
+    if not raw or candidate.is_absolute() or "\x00" in raw:
+        raise ValueError("Each uploaded dataset file needs a relative path.")
+    if any(part in {"", ".", ".."} or ":" in part for part in candidate.parts):
+        raise ValueError("Uploaded dataset paths must stay inside the selected folder.")
+    return Path(*candidate.parts)
+
+
+def _uploaded_dataset_name(value: str) -> str:
+    raw = str(value or "").strip().replace("\\", "/")
+    name = PurePosixPath(raw).name
+    if name.lower().endswith(".zip"):
+        name = name[:-4]
+    sanitized = re.sub(r"[^\w.-]+", "-", name, flags=re.UNICODE).strip(".-")
+    return sanitized or "dataset"
+
+
+def _discard_incomplete_dataset_upload(path: Path, root: Path) -> None:
+    candidate = path.resolve()
+    if candidate.parent != root.resolve() or not candidate.name.startswith(".upload-"):
+        raise ValueError("Invalid temporary dataset upload path.")
+    if candidate.is_dir():
+        shutil.rmtree(candidate)
+
+
+class _ZipArchiveStream:
+    """Adapt Starlette's upload tempfile to the seekable interface zipfile expects."""
+
+    def __init__(self, stream: BinaryIO):
+        self._stream = stream
+
+    def read(self, size: int = -1) -> bytes:
+        return self._stream.read(size)
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        return self._stream.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._stream.tell()
+
+    def seekable(self) -> bool:
+        return True
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+
+def save_uploaded_dataset_archive(filename: str, stream: BinaryIO) -> Dict[str, Any]:
+    """Extract one browser-uploaded ZIP archive without allowing path escape."""
+    incoming = Path(filename or "").name
+    if not incoming or Path(incoming).suffix.lower() != ".zip":
+        raise ValueError("Only .zip dataset archives are supported.")
+    root = DATASET_UPLOADS_ROOT.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    token = uuid.uuid4().hex
+    temporary = root / f".upload-{token}"
+    destination = root / f"{_uploaded_dataset_name(incoming)}-{token[:8]}"
+    total_bytes = 0
+    file_count = 0
+    temporary.mkdir()
+    try:
+        if hasattr(stream, "seek"):
+            stream.seek(0)
+        with zipfile.ZipFile(_ZipArchiveStream(stream)) as archive:
+            entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+            if not entries:
+                raise ValueError("The ZIP archive does not contain any files.")
+            original_paths = []
+            for entry in entries:
+                if entry.flag_bits & 0x1:
+                    raise ValueError("Encrypted ZIP archives are not supported.")
+                if stat.S_ISLNK(entry.external_attr >> 16):
+                    raise ValueError("ZIP archives cannot contain symbolic links.")
+                original_paths.append(_uploaded_dataset_relative_path(entry.filename))
+            if len(set(original_paths)) != len(original_paths):
+                raise ValueError("The ZIP archive contains duplicate paths.")
+
+            top_level_names = {path.parts[0] for path in original_paths}
+            remove_top_level = len(top_level_names) == 1 and all(len(path.parts) > 1 for path in original_paths)
+            paths = [Path(*path.parts[1:]) if remove_top_level else path for path in original_paths]
+            if len(set(paths)) != len(paths):
+                raise ValueError("The ZIP archive contains duplicate paths.")
+            for entry, relative_path in zip(entries, paths):
+                target = (temporary / relative_path).resolve()
+                if not target.is_relative_to(temporary.resolve()):
+                    raise ValueError("ZIP archive paths must stay inside the dataset folder.")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(entry) as source, target.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+                total_bytes += target.stat().st_size
+                file_count += 1
+        temporary.replace(destination)
+    except (zipfile.BadZipFile, NotImplementedError) as exc:
+        _discard_incomplete_dataset_upload(temporary, root)
+        raise ValueError("The uploaded file is not a valid ZIP archive.") from exc
+    except Exception:
+        _discard_incomplete_dataset_upload(temporary, root)
+        raise
+
+    return {
+        "dataset_path": str(destination.resolve()),
+        "folder_name": _uploaded_dataset_name(incoming),
+        "file_count": file_count,
+        "total_bytes": total_bytes,
+    }
 
 
 def prepare_source(

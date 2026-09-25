@@ -110,6 +110,31 @@ input:hover, select:hover { border-color: var(--border-strong); }
 input::placeholder { color: var(--faint); }
 .inline-field-action { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 9px; }
 .inline-field-action .button { min-width: 100px; }
+.dataset-input-drop { display: grid; max-width: 640px; gap: 8px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: 6px; background: var(--surface-subtle); transition: border-color .16s ease, background .16s ease, opacity .16s ease; }
+.dataset-input-drop:hover, .dataset-input-drop.is-dragover { border-color: var(--accent); background: var(--accent-soft); }
+.dataset-input-drop:focus-within { border-color: var(--accent); box-shadow: var(--focus); }
+.dataset-input-drop.is-uploading { border-color: var(--accent); cursor: wait; }
+.dataset-input-drop .field { gap: 5px; }
+.dataset-input-drop .field input { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.dataset-input-drop .field input:focus { outline: 0; }
+.dataset-input-drop .field input:disabled { cursor: wait; }
+.dataset-drop-hint { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.dataset-drop-hint svg { width: 15px; height: 15px; color: var(--accent); }
+.dataset-input-drop.is-dragover .dataset-drop-hint { color: var(--accent); }
+.dataset-upload-status { display: grid; gap: 8px; padding-top: 2px; }
+.dataset-upload-status.is-error { color: var(--danger); }
+.dataset-upload-status.is-success { color: var(--success); }
+.dataset-upload-copy { display: flex; align-items: flex-start; gap: 8px; color: var(--text); font-size: 12px; }
+.dataset-upload-copy > svg { width: 15px; height: 15px; margin-top: 2px; color: var(--accent); }
+.dataset-upload-status.is-uploading .dataset-upload-copy > svg { animation: spin .9s linear infinite; }
+.dataset-upload-status.is-error .dataset-upload-copy > svg { color: var(--danger); }
+.dataset-upload-status.is-success .dataset-upload-copy > svg { color: var(--success); }
+.dataset-upload-copy strong, .dataset-upload-copy span { display: block; }
+.dataset-upload-copy strong { margin-bottom: 2px; }
+.dataset-upload-copy span { color: var(--muted); font-size: 11px; font-weight: 500; }
+.dataset-upload-status .dataset-progress-track i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .16s linear; }
+.dataset-upload-status.is-error .dataset-progress-track i { background: var(--danger); }
+.dataset-upload-status.is-success .dataset-progress-track i { background: var(--success); }
 .conditional-block { max-width: 560px; margin-top: 12px; }
 .field-hint { margin: 6px 0 0; overflow: hidden; color: var(--faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .segmented { display: inline-flex; max-width: 100%; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); }

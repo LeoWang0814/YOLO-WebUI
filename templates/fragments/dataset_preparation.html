@@ -3,10 +3,70 @@
     <input type="hidden" name="data_path" value="{{ dataset.prepared_path }}">
     <div class="dataset-summary"><i data-lucide="circle-check-big"></i><div><strong>Ready for YOLOv10 Detect</strong><span>{{ dataset.format | replace('-', ' ') | title }} · {{ dataset.images }} images · {{ dataset.objects }} objects · {{ dataset.classes | length }} classes</span></div></div>
     <div class="dataset-stages"><span class="is-complete">Inspect</span><span class="is-complete">Verify</span><span class="is-complete">Prepare</span></div>
-    <details class="dataset-details"><summary>View dataset summary</summary><div class="dataset-splits">{% for split, count in dataset.splits.items() %}<span><strong>{{ split | title }}</strong>{{ count }} images</span>{% endfor %}</div><a href="/docs/datasets#supported-formats" target="_blank" rel="noopener">Learn how this format is detected and converted <i data-lucide="arrow-up-right"></i></a></details>
   {% elif dataset.status == 'blocked' %}
-    <i data-lucide="circle-alert"></i><div><strong>Dataset preparation is blocked</strong><span>{{ dataset.message }}</span><a href="/docs/datasets#incompatible-formats">Read supported formats and conversion rules <i data-lucide="arrow-up-right"></i></a></div>
+    <div class="dataset-blocked-copy"><i data-lucide="circle-alert"></i><div><strong>Dataset preparation is blocked</strong><span>{{ dataset.message }}</span><a href="/docs/datasets#incompatible-formats">Read supported formats and conversion rules <i data-lucide="arrow-up-right"></i></a></div></div>
   {% else %}
     <i data-lucide="folder-search-2"></i><span>{{ dataset.message }}</span>
+  {% endif %}
+
+  {% set layout = dataset.layout or {} %}
+  {% set layout_splits = layout.splits or {} %}
+  {% set split_policy = dataset.split_policy or {} %}
+  {% set split_ratios = split_policy.ratios or {'train': 0.8, 'val': 0.1, 'test': 0.1} %}
+  <details class="dataset-mapping" data-dataset-mapping data-layout-mode="{{ layout.mode or 'unknown' }}" {% if dataset.status == 'blocked' %}open{% endif %}>
+    <summary><span><i data-lucide="route"></i>Dataset mapping and split options</span><small>Auto-detected values can be edited</small></summary>
+    <div class="dataset-mapping-content">
+      <input type="hidden" name="dataset_options" value="{{ dataset.options_json or '' }}">
+      <div class="dataset-mapping-grid">
+        <label class="field"><span>Mapping mode</span><select data-map-mode><option value="auto">Use detected layout</option><option value="manual">Use these paths</option></select></label>
+        <label class="field"><span>Random seed</span><input type="number" data-split-seed value="{{ split_policy.seed if split_policy.seed is not none else 42 }}" min="0" step="1"></label>
+      </div>
+      <div class="dataset-map-table">
+        <div class="dataset-map-heading"><span>Split</span><span>Images directory</span><span>Labels directory</span></div>
+        {% for split in ('train', 'val', 'test') %}
+          {% set mapping = layout_splits.get(split, {}) %}
+          <div class="dataset-map-row" data-map-split="{{ split }}">
+            <strong>{{ split | title }}</strong>
+            <input data-map-images="{{ split }}" value="{{ mapping.images or '' }}" placeholder="{{ split }}/images">
+            <input data-map-labels="{{ split }}" value="{{ mapping.labels or '' }}" placeholder="{{ split }}/labels">
+          </div>
+        {% endfor %}
+      </div>
+      <div class="dataset-mapping-grid dataset-split-controls">
+        <label class="check-field"><input type="checkbox" data-create-val {% if split_policy.create_val is not defined or split_policy.create_val %}checked{% endif %}>Create validation split when missing</label>
+        <label class="check-field"><input type="checkbox" data-create-test {% if split_policy.create_test is not defined or split_policy.create_test %}checked{% endif %}>Create test split when missing</label>
+        <label class="field"><span>Train ratio</span><input type="number" data-split-ratio="train" value="{{ split_ratios.train }}" min="0" max="1" step="0.01"></label>
+        <label class="field"><span>Validation ratio</span><input type="number" data-split-ratio="val" value="{{ split_ratios.val }}" min="0" max="1" step="0.01"></label>
+        <label class="field"><span>Test ratio</span><input type="number" data-split-ratio="test" value="{{ split_ratios.test }}" min="0" max="1" step="0.01"></label>
+      </div>
+      <div class="dataset-class-editor">
+        <div class="dataset-map-heading"><span>Class ID</span><span>Class name</span><span></span></div>
+        {% set class_names = dataset.class_names or dataset.classes or ['class_0'] %}
+        {% for name in class_names %}
+          <div class="dataset-class-row"><strong>{{ loop.index0 }}</strong><input data-class-name value="{{ name }}"><span></span></div>
+        {% endfor %}
+        <button type="button" class="button button-secondary button-compact" data-add-class><i data-lucide="plus"></i>Add class</button>
+      </div>
+      <button type="button" class="button button-secondary button-compact" data-dataset-apply><i data-lucide="refresh-cw"></i>Apply mapping and prepare</button>
+    </div>
+  </details>
+
+  {% if dataset.structure %}
+    <details class="dataset-tree"><summary><span><i data-lucide="folder-tree"></i>Server folder structure</span><small>Only representative files are shown</small></summary>
+      <div class="dataset-tree-list">
+        {% for node in dataset.structure.nodes %}
+          <div class="dataset-tree-node" style="--tree-depth: {{ node.path.count('/') }}"><strong>{{ node.path }}</strong>{% if node.directories %}<span>dirs: {{ node.directories | join(', ') }}</span>{% endif %}{% if node.samples %}<span>samples: {{ node.samples | join(', ') }}{% if node.omitted %} · +{{ node.omitted }} more{% endif %}</span>{% endif %}</div>
+        {% endfor %}
+        {% if dataset.structure.truncated %}<small>Tree display truncated for safety.</small>{% endif %}
+      </div>
+    </details>
+  {% endif %}
+
+  {% if layout.warnings %}<div class="dataset-warnings"><i data-lucide="triangle-alert"></i><div>{% for warning in layout.warnings %}<span>{{ warning }}</span>{% endfor %}</div></div>{% endif %}
+  {% if layout.missing_labels %}<small class="dataset-inline-warning">{{ layout.missing_labels }} images have no matching label file and will be treated as empty-label images.</small>{% endif %}
+  {% set annotation_repairs = dataset.annotation_repairs or {} %}
+  {% if annotation_repairs.clipped_boxes %}<small class="dataset-inline-warning">{{ annotation_repairs.clipped_boxes }} YOLO boxes were adjusted to the image boundary using Ultralytics-compatible tolerance.</small>{% endif %}
+  {% if dataset.status == 'ready' %}
+    <details class="dataset-details"><summary>View dataset summary</summary><div class="dataset-splits">{% for split, count in dataset.splits.items() %}<span><strong>{{ split | title }}</strong>{{ count }} images</span>{% endfor %}</div><a href="/docs/datasets#supported-formats" target="_blank" rel="noopener">Learn how this format is detected and converted <i data-lucide="arrow-up-right"></i></a></details>
   {% endif %}
 </div>

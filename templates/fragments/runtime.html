@@ -3,4 +3,5 @@
   <span><strong>{% if runtime.cuda == 'incompatible' %}GPU issue{% elif runtime.cuda == 'available' %}GPU{% else %}CPU{% endif %}</strong></span>
   <span class="runtime-detail">Torch {{ runtime.torch }}</span>
   {% if runtime.gpu_list %}<span class="runtime-detail">{{ runtime.compatible_gpu_count }}/{{ runtime.gpu_list | length }} GPU</span>{% endif %}
+  {% if runtime.cuda != 'available' and runtime.cuda_note %}<span class="runtime-detail runtime-warning" title="{{ runtime.cuda_hint }}">{{ runtime.cuda_note }}</span>{% endif %}
 </div>

@@ -26,7 +26,7 @@
             <div class="upload-actions"><button type="button" class="button button-secondary button-compact" data-upload-pause hidden>Pause</button><button type="button" class="button button-secondary button-compact" data-upload-cancel hidden>Cancel</button></div>
           </div>
         </div>
-        <button class="button button-secondary button-compact" type="button" data-dataset-inspect hx-post="/fragments/dataset/prepare" hx-include="[name='dataset_path']" hx-target="#dataset-validation" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#dataset-progress"><i data-lucide="scan-search"></i>Inspect</button>
+        <button class="button button-secondary button-compact" type="button" data-dataset-inspect hx-post="/fragments/dataset/prepare" hx-include="[name='dataset_path'],[name='dataset_options']" hx-target="#dataset-validation" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#dataset-progress"><i data-lucide="scan-search"></i>Inspect</button>
       </div>
       <div id="dataset-progress" class="dataset-progress htmx-indicator" role="status" aria-live="polite"><div class="dataset-progress-copy"><i data-lucide="loader-circle"></i><span>Inspecting and preparing dataset…</span></div><div class="dataset-progress-track"><i></i></div></div>
       <div id="dataset-validation" class="dataset-validation is-neutral"><i data-lucide="folder-search-2"></i><span>Add a dataset folder to inspect it.</span></div>

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import torch
 from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
@@ -18,6 +19,7 @@ from core.uploads import UploadStore
 from core.runner import RunConflictError, RunJob, RunManager
 from web.forms import expert_groups, expert_values
 from web.docs import DOC_NAVIGATION, PARAMETER_OVERRIDES, docs_page, docs_search_index, docs_slugs, parameter_docs
+from ultralytics.utils.torch_utils import strip_optimizer
 
 
 def test_bundled_ultralytics_models_include_yolov10_detection_runtime():
@@ -269,6 +271,8 @@ def test_gpu_architecture_report_rejects_an_unsupported_wheel(monkeypatch):
     monkeypatch.setattr(gpu.torch.cuda, "get_arch_list", lambda: ["sm_90"])
     monkeypatch.setattr(gpu.torch.cuda, "device_count", lambda: 1)
     monkeypatch.setattr(gpu.torch.cuda, "get_device_properties", lambda index: Properties())
+    monkeypatch.setattr(gpu, "_query_nvidia_smi", lambda: [])
+    monkeypatch.setattr(gpu, "_cuda_device_probe", lambda index: False)
 
     report = gpu.cuda_device_report()
 
@@ -288,9 +292,64 @@ def test_gpu_architecture_report_accepts_a_matching_wheel(monkeypatch):
     monkeypatch.setattr(gpu.torch.cuda, "get_arch_list", lambda: ["sm_90", "sm_120"])
     monkeypatch.setattr(gpu.torch.cuda, "device_count", lambda: 1)
     monkeypatch.setattr(gpu.torch.cuda, "get_device_properties", lambda index: Properties())
+    monkeypatch.setattr(gpu, "_query_nvidia_smi", lambda: [])
+    monkeypatch.setattr(gpu, "_cuda_device_probe", lambda index: True)
 
     assert gpu.compatible_cuda_device_ids() == ["0"]
     assert gpu.cuda_runtime_error() == ""
+
+
+def test_gpu_architecture_report_accepts_runtime_probe_for_ada(monkeypatch):
+    class Properties:
+        major = 8
+        minor = 9
+        name = "NVIDIA GeForce RTX 4090"
+        total_memory = 48 * 1024**3
+
+    monkeypatch.setattr(gpu.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(gpu.torch.cuda, "get_arch_list", lambda: ["sm_90", "sm_120"])
+    monkeypatch.setattr(gpu.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(gpu.torch.cuda, "get_device_properties", lambda index: Properties())
+    monkeypatch.setattr(gpu, "_query_nvidia_smi", lambda: [])
+    monkeypatch.setattr(gpu, "_cuda_device_probe", lambda index: True)
+
+    report = gpu.cuda_device_report()
+
+    assert report["gpus"][0]["capability"] == "sm_89"
+    assert report["gpus"][0]["architecture_supported"] is False
+    assert report["gpus"][0]["runtime_probe"] is True
+    assert gpu.compatible_cuda_device_ids() == ["0"]
+
+
+def test_gpu_recovery_reboot_is_reported_as_node_level_failure(monkeypatch):
+    monkeypatch.setattr(gpu.torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(gpu, "cuda_driver_probe", lambda: {"code": 999, "name": "CUDA_ERROR_UNKNOWN", "detail": ""})
+    monkeypatch.setattr(
+        gpu,
+        "_query_nvidia_smi",
+        lambda: [{"index": "0", "name": "NVIDIA GeForce RTX 5090", "memory_gb": "31.8", "recovery_action": "Reboot"}],
+    )
+
+    report = gpu.cuda_device_report()
+    status = gpu.get_system_status()
+
+    assert report["gpus"][0]["recovery_action"] == "Reboot"
+    assert "node-level warm reboot" in gpu._cuda_runtime_error(report)
+    assert status["cuda_note"] == "Node reboot required."
+    assert status["gpu_recovery_actions"] == ["Reboot"]
+
+
+def test_strip_optimizer_loads_trusted_checkpoint_with_torch26_defaults(tmp_path):
+    model = torch.nn.Linear(2, 1)
+    model.args = {}
+    checkpoint = tmp_path / "last.pt"
+    torch.save({"model": model, "optimizer": {"state": "present"}, "train_args": {}}, checkpoint)
+
+    strip_optimizer(checkpoint)
+
+    finalized = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert finalized["optimizer"] is None
+    assert finalized["epoch"] == -1
 
 
 def test_metrics_snapshot_reports_epoch_metrics(tmp_path):
@@ -646,6 +705,8 @@ def test_dataset_preparation_hides_internal_detection_evidence(monkeypatch, clie
     assert 'data-dataset-job="completed"' in response.text
     assert completed.status_code == 200
     assert "View dataset summary" in completed.text
+    assert "data-dataset-mapping" in completed.text
+    assert "Server folder structure" not in completed.text
     assert "annotations.coco.json" not in completed.text
     assert 'href="/docs/datasets#supported-formats" target="_blank" rel="noopener"' in completed.text
 

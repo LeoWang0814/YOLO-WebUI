@@ -16,7 +16,7 @@ from pathlib import Path
 import torch
 
 from ultralytics.engine.model import Model
-from ultralytics.utils.torch_utils import model_info, smart_inference_mode
+from ultralytics.utils.torch_utils import model_info, smart_inference_mode, torch_load_compat
 from .predict import NASPredictor
 from .val import NASValidator
 
@@ -55,7 +55,7 @@ class NAS(Model):
 
         suffix = Path(weights).suffix
         if suffix == ".pt":
-            self.model = torch.load(weights)
+            self.model = torch_load_compat(weights)
         elif suffix == "":
             self.model = super_gradients.training.models.get(weights, pretrained_weights="coco")
         # Standardize model

@@ -450,6 +450,63 @@
     });
   };
 
+  const collectDatasetOptions = (panel) => {
+    const splits = {};
+    panel.querySelectorAll("[data-map-split]").forEach((row) => {
+      const name = row.dataset.mapSplit;
+      const images = row.querySelector("[data-map-images]")?.value.trim() || "";
+      const labels = row.querySelector("[data-map-labels]")?.value.trim() || "";
+      if (images) splits[name] = { images, labels };
+    });
+    const ratios = {};
+    panel.querySelectorAll("[data-split-ratio]").forEach((field) => { ratios[field.dataset.splitRatio] = Number(field.value) || 0; });
+    return {
+      layout: panel.querySelector("[data-map-mode]")?.value || "auto",
+      splits,
+      classes: [...panel.querySelectorAll("[data-class-name]")].map((field) => field.value.trim()).filter(Boolean),
+      split: {
+        create_val: Boolean(panel.querySelector("[data-create-val]")?.checked),
+        create_test: Boolean(panel.querySelector("[data-create-test]")?.checked),
+        ratios,
+        seed: Number(panel.querySelector("[data-split-seed]")?.value) || 42,
+      },
+    };
+  };
+
+  const syncDatasetOptions = (panel) => {
+    const hidden = panel.querySelector("[name='dataset_options']");
+    if (hidden) hidden.value = JSON.stringify(collectDatasetOptions(panel));
+  };
+
+  const initializeDatasetMapping = (scope = document) => {
+    scope.querySelectorAll("[data-dataset-mapping]").forEach((panel) => {
+      if (panel.dataset.bound) return;
+      panel.dataset.bound = "true";
+      const hidden = panel.querySelector("[name='dataset_options']");
+      try {
+        const saved = JSON.parse(hidden?.value || "{}");
+        if (saved.layout === "manual") panel.querySelector("[data-map-mode]").value = "manual";
+      } catch (_) { /* use the rendered automatic values */ }
+      panel.querySelectorAll("[data-map-images], [data-map-labels]").forEach((field) => field.addEventListener("input", () => {
+        panel.querySelector("[data-map-mode]").value = "manual";
+        syncDatasetOptions(panel);
+      }));
+      panel.querySelectorAll("input, select").forEach((field) => field.addEventListener("change", () => syncDatasetOptions(panel)));
+      panel.querySelector("[data-dataset-apply]")?.addEventListener("click", () => {
+        syncDatasetOptions(panel);
+        document.querySelector("[data-dataset-inspect]")?.click();
+      });
+      panel.querySelector("[data-add-class]")?.addEventListener("click", () => {
+        const rows = panel.querySelectorAll("[data-class-name]");
+        const row = document.createElement("div");
+        row.className = "dataset-class-row";
+        row.innerHTML = `<strong>${rows.length}</strong><input data-class-name value="class_${rows.length}"><span></span>`;
+        panel.querySelector("[data-add-class]").before(row);
+        syncDatasetOptions(panel);
+      });
+    });
+  };
+
   const initializeResumableUploads = (scope = document) => {
     scope.querySelectorAll("[data-resumable-upload][data-upload-kind]:not([data-upload-kind='dataset'])").forEach((zone) => {
       const input = zone.querySelector("[data-upload-input]");
@@ -946,6 +1003,7 @@
     initializeSearch(scope);
     initializeFileInputs(scope);
     initializeDatasetUploads(scope);
+    initializeDatasetMapping(scope);
     initializeResumableUploads(scope);
     initializeLogTerminals();
     initializeRunFilters(scope);

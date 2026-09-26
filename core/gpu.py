@@ -39,26 +39,40 @@ def _device_nodes() -> List[str]:
 
 
 def _query_nvidia_smi() -> List[Dict[str, str]]:
+    query = ["index", "name", "memory.total", "gpu_recovery_action"]
     try:
         result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,name,memory.total",
-                "--format=csv,noheader,nounits",
-            ],
+            ["nvidia-smi", f"--query-gpu={','.join(query)}", "--format=csv,noheader,nounits"],
             capture_output=True,
             text=True,
             check=True,
         )
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except FileNotFoundError:
         return []
+    except subprocess.CalledProcessError:
+        # Older drivers do not expose gpu_recovery_action. Keep inventory
+        # detection working there and leave the optional field empty.
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            query = query[:3]
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return []
     gpus = []
     for line in result.stdout.splitlines():
         parts = [part.strip() for part in line.split(",")]
-        if len(parts) != 3:
+        if len(parts) != len(query):
             continue
-        index, name, memory_total = parts
-        gpus.append({"index": index, "name": name, "memory_gb": f"{float(memory_total) / 1024:.1f}"})
+        index, name, memory_total = parts[:3]
+        try:
+            memory_gb = f"{float(memory_total) / 1024:.1f}"
+        except ValueError:
+            continue
+        gpus.append({"index": index, "name": name, "memory_gb": memory_gb, "recovery_action": parts[3] if len(parts) > 3 else ""})
     return gpus
 
 
@@ -84,27 +98,58 @@ def _architecture_supported(capability: str, architectures: List[str]) -> bool:
     return capability in architectures or capability.replace("sm_", "compute_") in architectures
 
 
+def _cuda_device_probe(index: int) -> bool:
+    """Run a tiny real CUDA operation to validate the device at runtime.
+
+    ``torch.cuda.get_arch_list()`` is useful diagnostic metadata, but it is not
+    a complete compatibility contract: wheels can execute a device through
+    embedded PTX even when its exact ``sm_*`` value is absent from that list.
+    A small convolution is a better final check and catches no-kernel-image,
+    broken driver, and device-mapping failures before a user starts training.
+    """
+    try:
+        device = torch.device(f"cuda:{index}")
+        with torch.cuda.device(device):
+            inputs = torch.randn((1, 3, 8, 8), device=device)
+            weights = torch.randn((4, 3, 3, 3), device=device)
+            torch.nn.functional.conv2d(inputs, weights).sum().item()
+            torch.cuda.synchronize(device)
+        return True
+    except (RuntimeError, OSError):
+        return False
+
+
 def cuda_device_report() -> Dict[str, object]:
-    """Describe CUDA devices and whether this wheel contains kernels for them."""
+    """Describe CUDA devices and whether the installed runtime can execute them."""
     driver_probe = cuda_driver_probe()
     cuda_available = torch.cuda.is_available()
     architectures = _compiled_cuda_architectures()
+    smi_gpus = _query_nvidia_smi()
+    smi_by_index = {str(gpu["index"]): gpu for gpu in smi_gpus}
     gpus: List[Dict[str, object]] = []
     if cuda_available:
         for index in range(torch.cuda.device_count()):
             properties = torch.cuda.get_device_properties(index)
             capability = f"sm_{properties.major}{properties.minor}"
+            smi_gpu = smi_by_index.get(str(index), {})
+            architecture_supported = _architecture_supported(capability, architectures)
+            runtime_probe = _cuda_device_probe(index)
             gpus.append(
                 {
                     "index": str(index),
                     "name": properties.name,
                     "memory_gb": f"{properties.total_memory / (1024 ** 3):.1f}",
                     "capability": capability,
-                    "compatible": _architecture_supported(capability, architectures),
+                    # The runtime probe is authoritative.  A wheel may omit
+                    # an exact sm value while still containing usable PTX.
+                    "compatible": runtime_probe,
+                    "architecture_supported": architecture_supported,
+                    "runtime_probe": runtime_probe,
+                    "recovery_action": smi_gpu.get("recovery_action", ""),
                 }
             )
     else:
-        gpus = [{**gpu, "capability": "", "compatible": False} for gpu in _query_nvidia_smi()]
+        gpus = [{**gpu, "capability": "", "compatible": False} for gpu in smi_gpus]
     compatible = [gpu for gpu in gpus if gpu["compatible"]]
     incompatible = [gpu for gpu in gpus if not gpu["compatible"]]
     return {
@@ -126,6 +171,15 @@ def _cuda_runtime_error(report: Dict[str, object]) -> str:
     gpus = report["gpus"]
     if not gpus:
         return ""
+    recovery = {str(gpu.get("recovery_action", "")).strip().lower() for gpu in gpus if gpu.get("recovery_action")}
+    if "reboot" in recovery:
+        return (
+            "NVIDIA reports GPU Recovery Action: Reboot. A node-level warm reboot is required; restarting the WebUI or Python process cannot restore CUDA."
+        )
+    if "reset" in recovery:
+        return "NVIDIA reports GPU Recovery Action: Reset. Stop GPU applications and reset the affected GPU before using CUDA training."
+    if "drain p2p" in recovery or "drain and reset" in recovery:
+        return "NVIDIA reports GPU Recovery Action: Drain and reset. Stop GPU applications and complete the driver recovery before using CUDA training."
     if not report["cuda_available"]:
         probe = report["driver_probe"]
         if probe["code"] == 999:
@@ -162,7 +216,13 @@ def get_system_status() -> Dict[str, object]:
     runtime_error = _cuda_runtime_error(report)
     if runtime_error:
         cuda_state = "incompatible"
-        cuda_note = "CUDA runtime unavailable." if not report["cuda_available"] else "PyTorch GPU architecture mismatch."
+        recovery = {str(gpu.get("recovery_action", "")).strip().lower() for gpu in gpus if gpu.get("recovery_action")}
+        if "reboot" in recovery:
+            cuda_note = "Node reboot required."
+        elif recovery:
+            cuda_note = "NVIDIA GPU recovery required."
+        else:
+            cuda_note = "CUDA runtime unavailable." if not report["cuda_available"] else "PyTorch GPU architecture mismatch."
         cuda_hint = runtime_error
     elif report["cuda_available"]:
         cuda_state = "available"
@@ -181,6 +241,7 @@ def get_system_status() -> Dict[str, object]:
         "gpu_count": len(gpus),
         "compatible_gpu_count": len(report["compatible"]),
         "gpu_list": gpus,
+        "gpu_recovery_actions": sorted({str(gpu.get("recovery_action", "")) for gpu in gpus if gpu.get("recovery_action")}),
         "gpu_source": gpu_source,
         "compiled_architectures": report["architectures"],
         "cuda_driver_probe": report["driver_probe"],

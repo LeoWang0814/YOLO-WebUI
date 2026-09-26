@@ -67,6 +67,7 @@ from ultralytics.utils.torch_utils import (
     make_divisible,
     model_info,
     scale_img,
+    torch_load_compat,
     time_sync,
 )
 
@@ -707,10 +708,7 @@ def temporary_modules(modules=None):
 
 
 def _torch_load_compat(file):
-    try:
-        return torch.load(file, map_location="cpu", weights_only=False)
-    except TypeError:
-        return torch.load(file, map_location="cpu")
+    return torch_load_compat(file, map_location="cpu")
 
 
 def torch_safe_load(weight):

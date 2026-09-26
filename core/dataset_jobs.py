@@ -14,6 +14,7 @@ from core.datasets import inspect_dataset
 class DatasetPreparationJob:
     id: str
     path: str
+    options: dict[str, Any] = field(default_factory=dict)
     percent: int = 0
     message: str = "Queued"
     active: bool = True
@@ -42,8 +43,8 @@ class DatasetPreparationManager:
         self._jobs: dict[str, DatasetPreparationJob] = {}
         self._lock = threading.Lock()
 
-    def start(self, path: str) -> DatasetPreparationJob:
-        job = DatasetPreparationJob(id=uuid.uuid4().hex[:12], path=path)
+    def start(self, path: str, options: Optional[dict[str, Any]] = None) -> DatasetPreparationJob:
+        job = DatasetPreparationJob(id=uuid.uuid4().hex[:12], path=path, options=options or {})
         with self._lock:
             self._jobs[job.id] = job
         thread = threading.Thread(target=self._run, args=(job,), name=f"dataset-{job.id}", daemon=True)
@@ -57,7 +58,7 @@ class DatasetPreparationManager:
     @staticmethod
     def _run(job: DatasetPreparationJob) -> None:
         try:
-            result = inspect_dataset(job.path, progress=job.update)
+            result = inspect_dataset(job.path, progress=job.update, options=job.options)
         except Exception as exc:  # Defensive boundary so polling always reaches a terminal state.
             result = {"status": "blocked", "message": f"Dataset preparation failed: {exc}", "prepared_path": ""}
         job.finish(result)

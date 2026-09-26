@@ -33,6 +33,15 @@ TORCHVISION_0_11 = check_version(torchvision.__version__, "0.11.0")
 TORCHVISION_0_13 = check_version(torchvision.__version__, "0.13.0")
 
 
+def torch_load_compat(file, map_location=None):
+    """Load a trusted Ultralytics checkpoint across PyTorch 2.6+ and older releases."""
+    kwargs = {"map_location": map_location} if map_location is not None else {}
+    try:
+        return torch.load(file, weights_only=False, **kwargs)
+    except TypeError:
+        return torch.load(file, **kwargs)
+
+
 @contextmanager
 def torch_distributed_zero_first(local_rank: int):
     """Decorator to make all processes in distributed training wait for each local_master to do something."""
@@ -483,7 +492,10 @@ def strip_optimizer(f: Union[str, Path] = "best.pt", s: str = "") -> None:
             strip_optimizer(f)
         ```
     """
-    x = torch.load(f, map_location=torch.device("cpu"))
+    # Training checkpoints contain trusted Ultralytics model objects. PyTorch
+    # 2.6+ defaults to ``weights_only=True``, which rejects those objects while
+    # finalizing a completed run.
+    x = torch_load_compat(f, map_location=torch.device("cpu"))
     if "model" not in x:
         LOGGER.info(f"Skipping {f}, not a valid Ultralytics model.")
         return

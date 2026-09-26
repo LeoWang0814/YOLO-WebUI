@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import time
 import threading
 from contextlib import asynccontextmanager
@@ -607,7 +608,16 @@ async def upload_dataset_fragment(request: Request):
 async def dataset_fragment(request: Request):
     form = await request.form()
     path = str(form.get("dataset_path") or form.get("data_path") or "")
-    job = dataset_manager.start(path)
+    options = {}
+    raw_options = str(form.get("dataset_options") or "").strip()
+    if raw_options:
+        try:
+            decoded = json.loads(raw_options)
+            if isinstance(decoded, dict):
+                options = decoded
+        except json.JSONDecodeError:
+            options = {}
+    job = dataset_manager.start(path, options) if options else dataset_manager.start(path)
     return _template(request, "fragments/dataset_progress.html", job=job.snapshot())
 
 

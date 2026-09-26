@@ -28,6 +28,7 @@ import torch
 from ultralytics.cfg import get_cfg, get_save_dir
 from ultralytics.utils import DEFAULT_CFG, LOGGER, callbacks, colorstr, remove_colorstr, yaml_print, yaml_save
 from ultralytics.utils.plotting import plot_tune_results
+from ultralytics.utils.torch_utils import torch_load_compat
 
 
 class Tuner:
@@ -194,7 +195,7 @@ class Tuner:
                 cmd = ["yolo", "train", *(f"{k}={v}" for k, v in train_args.items())]
                 return_code = subprocess.run(cmd, check=True).returncode
                 ckpt_file = weights_dir / ("best.pt" if (weights_dir / "best.pt").exists() else "last.pt")
-                metrics = torch.load(ckpt_file)["train_metrics"]
+                metrics = torch_load_compat(ckpt_file)["train_metrics"]
                 assert return_code == 0, "training failed"
 
             except Exception as e:

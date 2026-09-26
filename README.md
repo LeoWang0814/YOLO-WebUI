@@ -55,51 +55,74 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 
 ## Quick start
 
-> [!NOTE]
-> Choose the PyTorch runtime file that matches the target hardware. The CUDA 12.8 file is required for NVIDIA Blackwell GPUs such as RTX 50-series.
+Choose exactly one of the three installation branches below. Each branch is a complete setup for a fresh checkout and uses a separate Conda environment. If `conda activate` is not available in the current shell, run `conda init` once and reopen the terminal before starting.
 
-### NVIDIA GPU
+The PyTorch wheels include their CUDA runtime. The NVIDIA driver still needs to support that runtime; the system `nvcc` version alone does not select the wheel. Do not install more than one of these runtime requirement files into the same environment.
+
+### NVIDIA: CUDA 12.8 or newer (Blackwell / RTX 50-series)
+
+Use this branch for NVIDIA Blackwell GPUs, including RTX 50-series, or any NVIDIA driver that supports CUDA 12.8 or newer. It installs the `cu128` PyTorch wheels, which include `sm_120` support.
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
 cd yolov10-webui
 
-conda init
-conda create -n yolov10 python=3.10
-conda activate yolov10
+conda create -n yolov10-cu128 python=3.10 -y
+conda activate yolov10-cu128
 
-pip install -r requirements-cuda128.txt
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements-cuda128.txt
+python -m pip install -e .
 
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list(), torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-The check should show CUDA `12.8`, an architecture list containing your GPU architecture (for RTX 50-series, `sm_120`), `True`, and the detected GPU count. If `nvidia-smi` sees a GPU but this check returns `False`, run the detailed preflight report:
+The verification command should report CUDA `12.8`, an architecture list containing the installed GPU architecture (for RTX 50-series, `sm_120`), `True`, and the detected GPU count.
 
-```bash
-python tools/check_cuda.py
-```
+### NVIDIA: CUDA 11.8 to 12.7 (pre-Blackwell)
 
-For older NVIDIA drivers or CUDA 11.8 systems, use `requirements-cuda118.txt` instead. When using Docker, launch the image with the NVIDIA runtime and pass the assigned GPUs through (`--gpus all` or `--gpus '"device=0,1"'`). The image requests both `compute` and `utility` driver capabilities; omitting `compute` can leave `nvidia-smi` working while `cuInit()` returns `CUDA_ERROR_UNKNOWN (999)`. A container where this still happens has a host/container driver-runtime problem; reinstalling Python packages inside that container cannot repair it. Recreate the container with the NVIDIA runtime or repair the host `nvidia_uvm` module and device mapping first. Then open [http://127.0.0.1:7860](http://127.0.0.1:7860).
-
-### CPU
+Use this branch for pre-Blackwell NVIDIA GPUs when the available driver/runtime is in the CUDA 11.8–12.7 range. The project installs the `cu118` PyTorch wheels from `requirements-cuda118.txt`; a separate system CUDA toolkit is not required.
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
 cd yolov10-webui
 
-conda init
-conda create -n yolov10 python=3.10
-conda activate yolov10
+conda create -n yolov10-cu118 python=3.10 -y
+conda activate yolov10-cu118
 
-pip install -r requirements-cpu.txt
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements-cuda118.txt
+python -m pip install -e .
 
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list(), torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-Open [http://127.0.0.1:7860](http://127.0.0.1:7860).
+The verification command should report CUDA `11.8`, `True`, and the detected GPU count. Do not use this branch for RTX 50-series/Blackwell GPUs; use the CUDA 12.8 branch instead.
+
+When using Docker, launch the image with the NVIDIA runtime and pass the assigned GPUs through (`--gpus all` or `--gpus '"device=0,1"'`). The image requests both `compute` and `utility` driver capabilities; omitting `compute` can leave `nvidia-smi` working while `cuInit()` returns `CUDA_ERROR_UNKNOWN (999)`. A container where this still happens has a host/container driver-runtime problem; reinstalling Python packages inside that container cannot repair it. Recreate the container with the NVIDIA runtime or repair the host `nvidia_uvm` module and device mapping first.
+
+### CPU only
+
+Use this branch when no NVIDIA GPU is available or when CPU execution is preferred. It installs the CPU-only PyTorch wheels and does not require CUDA.
+
+```bash
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
+cd yolov10-webui
+
+conda create -n yolov10-cpu python=3.10 -y
+conda activate yolov10-cpu
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements-cpu.txt
+python -m pip install -e .
+
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python app.py
+```
+
+The verification command should report `False` for CUDA availability. Open [http://127.0.0.1:7860](http://127.0.0.1:7860) after the service starts.
 
 ## Launch options
 

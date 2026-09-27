@@ -1,5 +1,6 @@
 import io
 import hashlib
+import json
 import os
 import signal
 import threading
@@ -371,6 +372,48 @@ def test_metrics_snapshot_reports_epoch_metrics(tmp_path):
     assert snapshot["summary"][0]["value"] == "0.1500"
     assert "loss" in snapshot["figures"]
     assert workflows.completed_epochs(tmp_path) == 3
+
+
+def test_metrics_snapshot_supports_yolov10_loss_columns(tmp_path):
+    results = pd.DataFrame(
+        {
+            "epoch": [0, 1],
+            "train/box_om": [1.2, 0.8],
+            "train/cls_om": [0.6, 0.3],
+            "train/dfl_om": [1.1, 0.7],
+            "train/box_oo": [1.0, 0.5],
+            "val/box_om": [1.4, 0.9],
+            "metrics/mAP50(B)": [0.2, 0.4],
+        }
+    )
+    results.to_csv(tmp_path / "results.csv", index=False)
+
+    snapshot = workflows.metrics_snapshot(tmp_path, "light")
+
+    assert snapshot["summary"][-1]["value"] == "0.8000"
+    figure = json.loads(snapshot["figures"]["loss"])
+    assert {trace["name"] for trace in figure["data"]} == {
+        "Train box loss (one-to-many)",
+        "Train class loss (one-to-many)",
+        "Train DFL loss (one-to-many)",
+        "Train box loss (one-to-one)",
+        "Validation box loss (one-to-many)",
+    }
+
+
+def test_metrics_snapshot_shows_first_epoch_as_points_and_refreshes(tmp_path):
+    csv = tmp_path / "results.csv"
+    csv.write_text("epoch,train/box_loss,train/cls_loss\n1,1.5,0.8\n", encoding="utf-8")
+    first = json.loads(workflows.metrics_snapshot(tmp_path)["figures"]["loss"])
+    assert first["data"][0]["mode"] == "lines+markers"
+    assert first["data"][0]["x"] == [1]
+    with csv.open("a", encoding="utf-8") as stream:
+        stream.write("2,1.0,0.5\n")
+    updated = workflows.metrics_snapshot(tmp_path)
+    loss = json.loads(updated["figures"]["loss"])
+    assert loss["data"][0]["x"] == [1, 2]
+    assert loss["data"][0]["y"] == [1.5, 1.0]
+    assert updated["summary"][-1]["value"] == "1.0000"
 
 
 def test_task_progress_uses_epoch_image_and_video_log_counters(tmp_path):

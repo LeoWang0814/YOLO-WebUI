@@ -15,7 +15,7 @@
 </div>
 <section class="run-list">
   <div class="run-list-header"><span>Type</span><span>Name</span><span>Updated</span><span>Artifacts</span><span></span></div>
-  {% for run in runs %}<a class="run-row" data-run-row data-run-kind="{{ run.kind }}" data-run-name="{{ run.name | lower }}" href="/runs/{{ run.kind }}/{{ run.name }}"><span class="run-kind">{{ run.kind }}</span><strong>{{ run.name }}</strong><span>{{ run.updated }}</span><span>{{ run.artifacts }}</span><i data-lucide="chevron-right"></i></a>{% else %}<div class="empty-output compact-empty"><i data-lucide="folder-open"></i><span>No local runs</span></div>{% endfor %}
+  {% for run in runs %}<a class="run-row" data-run-row data-run-kind="{{ run.kind }}" data-run-name="{{ run.name | lower }}" href="/runs/{{ run.kind }}/{{ run.name }}"><span class="run-kind">{{ run.kind }}</span><strong data-i18n-skip>{{ run.name }}</strong><span>{{ run.updated }}</span><span>{{ run.artifacts }}</span><i data-lucide="chevron-right"></i></a>{% else %}<div class="empty-output compact-empty"><i data-lucide="folder-open"></i><span>No local runs</span></div>{% endfor %}
   <div class="empty-output compact-empty" data-run-empty hidden><i data-lucide="search-x"></i><span>No matching runs</span></div>
 </section>
 {% endblock %}

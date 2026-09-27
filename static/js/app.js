@@ -5,6 +5,7 @@
   const pendingLogScroll = new Map();
   const uploadTasks = new WeakMap();
   const t = (value) => window.WorkbenchI18n?.t(value) || value;
+  const setText = (element, source) => window.WorkbenchI18n.setText(element, source);
   const actualTheme = (preference) => preference === "system"
     ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
     : preference;
@@ -15,23 +16,47 @@
     root.dataset.themePreference = preference;
     updateThemeToggle(theme);
     document.querySelectorAll("[data-plot]").forEach((chart) => { delete chart.dataset.plotReady; });
+    renderCharts();
     const results = document.querySelector("#run-results[hx-get]");
     if (results && window.htmx) window.htmx.trigger(results, "load");
   };
 
   const renderCharts = (scope = document) => {
     if (!window.Plotly) return;
-    scope.querySelectorAll("[data-plot]").forEach((chart) => {
+    const charts = [...scope.querySelectorAll("[data-plot]")];
+    if (scope.matches?.("[data-plot]")) charts.unshift(scope);
+    charts.forEach((chart) => {
       if (chart.dataset.plotReady === "true") return;
       try {
         const figure = JSON.parse(chart.dataset.plot);
-        window.Plotly.react(chart, figure.data || [], figure.layout || {}, {
+        // Plotly receives server-generated English trace names. Translate the
+        // display labels at render time so a language switch also updates
+        // charts that are already present in the results fragment.
+        (figure.data || []).forEach((trace) => {
+          if (trace.name) trace.name = t(trace.name);
+        });
+        if (figure.layout?.title?.text) figure.layout.title.text = t(figure.layout.title.text);
+        [figure.layout?.xaxis, figure.layout?.yaxis].forEach((axis) => {
+          if (axis?.title?.text) axis.title.text = t(axis.title.text);
+        });
+        (figure.layout?.annotations || []).forEach((annotation) => { annotation.text = t(annotation.text); });
+        // Use the current theme for saved runs as well as polling fragments.
+        const dark = root.dataset.theme === "dark";
+        figure.layout.font = { ...figure.layout.font, color: dark ? "#edf4f1" : "#17221e" };
+        [figure.layout.xaxis, figure.layout.yaxis].forEach((axis) => {
+          if (axis) axis.gridcolor = dark ? "#33413c" : "#dce5e0";
+        });
+        const rendered = window.Plotly.react(chart, figure.data || [], figure.layout || {}, {
           displayModeBar: false,
           responsive: true,
         });
         chart.dataset.plotReady = "true";
+        Promise.resolve(rendered).catch(() => {
+          delete chart.dataset.plotReady;
+          setText(chart, "Unable to render metrics.");
+        });
       } catch (_) {
-        chart.textContent = t("Unable to render metrics.");
+        setText(chart, "Unable to render metrics.");
       }
     });
   };
@@ -44,8 +69,8 @@
     const toggle = document.querySelector("[data-theme-toggle]");
     if (!toggle) return;
     const nextTheme = theme === "dark" ? "light" : "dark";
-    toggle.setAttribute("aria-label", t(`Switch to ${nextTheme} theme`));
-    toggle.setAttribute("title", t(`Switch to ${nextTheme} theme`));
+    window.WorkbenchI18n.setAttribute(toggle, "aria-label", `Switch to ${nextTheme} theme`);
+    window.WorkbenchI18n.setAttribute(toggle, "title", `Switch to ${nextTheme} theme`);
     toggle.innerHTML = `<i data-lucide="${theme === "dark" ? "sun" : "moon"}"></i>`;
     initializeIcons();
   };
@@ -70,7 +95,7 @@
       search.addEventListener("input", () => {
         const query = search.value.trim().toLowerCase();
         document.querySelectorAll("[data-parameter-name]").forEach((field) => {
-          field.hidden = Boolean(query && !field.dataset.parameterName.toLowerCase().includes(query));
+          field.hidden = Boolean(query && !`${field.dataset.parameterName} ${t(field.dataset.parameterName)}`.toLowerCase().includes(query));
         });
       });
     });
@@ -83,9 +108,12 @@
       input.addEventListener("change", () => {
         const summary = input.closest(".upload-drop")?.querySelector("[data-file-summary]");
         if (!summary) return;
-        if (!input.files?.length) summary.textContent = t(input.multiple ? "No files selected" : "No file selected");
-        else if (input.files.length === 1) summary.textContent = input.files[0].name;
-        else summary.textContent = t(`${input.files.length} files selected`);
+        summary.removeAttribute("data-i18n-skip");
+        if (!input.files?.length) setText(summary, input.multiple ? "No files selected" : "No file selected");
+        else if (input.files.length === 1) {
+          summary.setAttribute("data-i18n-skip", "");
+          summary.textContent = input.files[0].name;
+        } else setText(summary, `${input.files.length} files selected`);
       });
     });
   };
@@ -108,8 +136,8 @@
     const summary = status.querySelector("[data-dataset-upload-detail]");
     const track = status.querySelector("[data-dataset-upload-track]");
     const fill = track?.querySelector("i");
-    if (title) title.textContent = label;
-    if (summary) summary.textContent = detail;
+    setText(title, label);
+    setText(summary, detail);
     if (track) {
       const bounded = Math.max(0, Math.min(100, Math.round(percent)));
       track.setAttribute("aria-valuenow", String(bounded));
@@ -155,8 +183,8 @@
     const summary = status.querySelector("[data-upload-detail]");
     const track = status.querySelector("[data-upload-track]");
     const fill = track?.querySelector("i");
-    if (title) title.textContent = label;
-    if (summary) summary.textContent = detail;
+    setText(title, label);
+    setText(summary, detail);
     if (track) {
       const bounded = Math.max(0, Math.min(100, Math.round(percent)));
       track.setAttribute("aria-valuenow", String(bounded));
@@ -167,7 +195,7 @@
     const active = state === "hashing" || state === "uploading" || state === "saving";
     if (pause) {
       pause.hidden = !active && state !== "paused";
-      pause.textContent = state === "paused" ? t("Resume") : t("Pause");
+      setText(pause, state === "paused" ? "Resume" : "Pause");
     }
     if (cancel) cancel.hidden = !active && state !== "paused";
   };
@@ -198,16 +226,16 @@
       const message = event.data || {};
       if (message.type === "progress") {
         const percent = message.total ? message.processed * 100 / message.total : 0;
-        setUploadStatus(zone, "hashing", t("Verifying file…"), `${formatBytes(message.processed)} / ${formatBytes(message.total)}`, percent);
+        setUploadStatus(zone, "hashing", "Verifying file…", `${formatBytes(message.processed)} / ${formatBytes(message.total)}`, percent);
       } else if (message.type === "complete") {
         worker.terminate();
         resolve(message.sha256);
       } else if (message.type === "error") {
         worker.terminate();
-        reject(new Error(message.message || t("Unable to verify the file.")));
+        reject(new Error(message.message || "Unable to verify the file."));
       }
     };
-    worker.onerror = () => { worker.terminate(); reject(new Error(t("Unable to verify the file."))); };
+    worker.onerror = () => { worker.terminate(); reject(new Error("Unable to verify the file.")); };
     worker.postMessage({ file, chunkSize: 8 * 1024 * 1024 });
   });
 
@@ -225,15 +253,15 @@
     xhr.onload = () => {
       task.xhr = null;
       if (xhr.status >= 200 && xhr.status < 300) {
-        try { resolve(JSON.parse(xhr.responseText || "{}")); } catch (_) { reject(new Error(t("The server returned an invalid upload response."))); }
+        try { resolve(JSON.parse(xhr.responseText || "{}")); } catch (_) { reject(new Error("The server returned an invalid upload response.")); }
       } else {
         let message = `Request failed (${xhr.status}).`;
         try { message = JSON.parse(xhr.responseText || "{}").detail || message; } catch (_) { /* plain response */ }
         reject(new Error(message));
       }
     };
-    xhr.onerror = () => { task.xhr = null; reject(new Error(t("The service could not be reached."))); };
-    xhr.onabort = () => { task.xhr = null; reject(Object.assign(new Error(t("Upload paused.")), { paused: true })); };
+    xhr.onerror = () => { task.xhr = null; reject(new Error("The service could not be reached.")); };
+    xhr.onabort = () => { task.xhr = null; reject(Object.assign(new Error("Upload paused."), { paused: true })); };
     xhr.send(chunk);
   });
 
@@ -282,7 +310,10 @@
       if (modelInput) modelInput.value = "";
     }
     const summary = zone.querySelector("[data-file-summary]");
-    if (summary) summary.textContent = file.name;
+    if (summary) {
+      summary.setAttribute("data-i18n-skip", "");
+      summary.textContent = file.name;
+    }
   };
 
   const uploadOneFile = async (zone, kind, file, task) => {
@@ -309,8 +340,8 @@
     let previousBytes = offset;
     let previousTime = performance.now();
     while (offset < file.size) {
-      if (task.cancelled) throw Object.assign(new Error(t("Upload cancelled.")), { cancelled: true });
-      if (task.paused) { setUploadStatus(zone, "paused", t("Upload paused"), `${formatBytes(offset)} / ${formatBytes(file.size)}`, offset * 100 / file.size); return null; }
+      if (task.cancelled) throw Object.assign(new Error("Upload cancelled."), { cancelled: true });
+      if (task.paused) { setUploadStatus(zone, "paused", "Upload paused", `${formatBytes(offset)} / ${formatBytes(file.size)}`, offset * 100 / file.size); return null; }
       const chunk = file.slice(offset, Math.min(file.size, offset + chunkSize));
       let response;
       let attempt = 0;
@@ -319,7 +350,7 @@
           response = await requestChunk(task, session, file, offset, chunk, (loaded) => {
             const now = performance.now();
             const speed = (loaded - previousBytes) * 1000 / Math.max(1, now - previousTime);
-            setUploadStatus(zone, "uploading", t("Uploading file…"), `${formatBytes(loaded)} / ${formatBytes(file.size)} · ${formatBytes(speed)}/s`, loaded * 100 / file.size);
+            setUploadStatus(zone, "uploading", "Uploading file…", `${formatBytes(loaded)} / ${formatBytes(file.size)} · ${formatBytes(speed)}/s`, loaded * 100 / file.size);
             previousBytes = loaded; previousTime = now;
           });
           break;
@@ -332,9 +363,9 @@
       offset = Number(response.offset);
       session.offset = offset;
       localStorage.setItem(storageKey, JSON.stringify({ upload_id: session.upload_id, sha256: digest }));
-      setUploadStatus(zone, "uploading", t("Uploading file…"), `${formatBytes(offset)} / ${formatBytes(file.size)}`, offset * 100 / file.size);
+      setUploadStatus(zone, "uploading", "Uploading file…", `${formatBytes(offset)} / ${formatBytes(file.size)}`, offset * 100 / file.size);
     }
-    setUploadStatus(zone, "saving", t("Finalizing upload…"), `${formatBytes(file.size)} · ${t("Checking checksum…")}`, 100);
+    setUploadStatus(zone, "saving", "Finalizing upload…", `${formatBytes(file.size)} · Checking checksum…`, 100);
     const completed = await uploadJson(`/api/uploads/${encodeURIComponent(session.upload_id)}/complete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sha256: digest }) });
     localStorage.removeItem(storageKey);
     finalizeUploadedFile(zone, kind, file, completed, completed);
@@ -365,11 +396,11 @@
         setDatasetUploadBusy(zone, false);
         zone.closest(".inline-field-action")?.querySelector("[data-dataset-inspect]")?.click();
       }
-      setUploadStatus(zone, "success", kind === "dataset" ? t("Dataset archive extracted") : t("Upload complete"), t("Ready to use on this server."), 100);
+      setUploadStatus(zone, "success", kind === "dataset" ? "Dataset archive extracted" : "Upload complete", "Ready to use on this server.", 100);
     } catch (error) {
       if (!error.cancelled && !error.paused) {
-        setUploadStatus(zone, "error", t("Upload failed"), error.message || t("The service could not be reached."), 0);
-        showFeedback(error.message || t("The service could not be reached."));
+        setUploadStatus(zone, "error", "Upload failed", error.message || "The service could not be reached.", 0);
+        showFeedback(error.message || "The service could not be reached.");
       }
     } finally {
       if (!task.paused) {
@@ -387,9 +418,9 @@
 
   const collectDroppedArchive = (dataTransfer) => {
     const files = [...(dataTransfer.files || [])];
-    if (files.length !== 1) throw new Error(t("Drop one .zip file at a time."));
+    if (files.length !== 1) throw new Error("Drop one .zip file at a time.");
     const [archive] = files;
-    if (!archive.name.toLowerCase().endsWith(".zip")) throw new Error(t("Only .zip dataset archives can be dropped here."));
+    if (!archive.name.toLowerCase().endsWith(".zip")) throw new Error("Only .zip dataset archives can be dropped here.");
     return archive;
   };
 
@@ -419,8 +450,8 @@
         try {
           uploadDatasetArchive(zone, collectDroppedArchive(event.dataTransfer));
         } catch (error) {
-          const message = error instanceof Error ? error.message : t("Only .zip dataset archives can be dropped here.");
-          setDatasetUploadStatus(zone, "error", t("Uploading dataset…"), message, 0);
+          const message = error instanceof Error ? error.message : "Only .zip dataset archives can be dropped here.";
+          setDatasetUploadStatus(zone, "error", "Uploading dataset…", message, 0);
           showFeedback(message);
         }
       });
@@ -443,7 +474,7 @@
             task.cancelled = true;
             task.paused = false;
             if (task.xhr) task.xhr.abort();
-            setUploadStatus(zone, "error", t("Upload cancelled"), t("Drop the archive again to restart."), 0);
+            setUploadStatus(zone, "error", "Upload cancelled", "Drop the archive again to restart.", 0);
           }
         });
       });
@@ -549,7 +580,7 @@
             task.cancelled = true;
             task.paused = false;
             if (task.xhr) task.xhr.abort();
-            setUploadStatus(zone, "error", t("Upload cancelled"), t("Choose the file again to restart."), 0);
+            setUploadStatus(zone, "error", "Upload cancelled", "Choose the file again to restart.", 0);
           }
         });
       });
@@ -565,9 +596,9 @@
     const label = status?.querySelector("span");
     if (!status || !label) return;
     status.classList.toggle("is-paused", !following);
-    label.textContent = following
-      ? t(section.hasAttribute("hx-get") ? "Following output" : "At latest output")
-      : t("Auto-follow paused");
+    setText(label, following
+      ? (section.hasAttribute("hx-get") ? "Following output" : "At latest output")
+      : "Auto-follow paused");
   };
 
   const captureLogScroll = (target) => {
@@ -671,7 +702,7 @@
     clampViewerOffset();
     media.style.transform = `translate3d(${viewerState.offsetX}px, ${viewerState.offsetY}px, 0) scale(${viewerState.scale})`;
     const caption = viewer.querySelector("[data-viewer-caption]");
-    if (caption) caption.textContent = viewerState.scale === 1 ? t("Fit to view") : `${Math.round(viewerState.scale * 100)}%`;
+    setText(caption, viewerState.scale === 1 ? "Fit to view" : `${Math.round(viewerState.scale * 100)}%`);
     updateViewerInteractionState();
   };
 
@@ -772,7 +803,7 @@
       video.src = src;
       video.load();
     }
-    if (title) title.textContent = trigger.dataset.mediaLabel || t(kind === "video" ? "Video" : "Image");
+    setText(title, trigger.dataset.mediaLabel || (kind === "video" ? "Video" : "Image"));
     if (original) original.href = src;
     viewer.hidden = false;
     viewer.setAttribute("aria-hidden", "false");
@@ -830,7 +861,7 @@
     window.clearTimeout(feedbackTimer);
     const alert = document.createElement("div");
     alert.className = `feedback-alert is-${tone}`;
-    alert.textContent = message;
+    setText(alert, message);
     region.replaceChildren(alert);
     feedbackTimer = window.setTimeout(() => region.replaceChildren(), 6000);
   };
@@ -862,7 +893,7 @@
           initializeScope();
         } catch (_) {
           const status = element.querySelector(".dataset-progress-copy span");
-          if (status) status.textContent = t("Reconnecting to dataset preparation status…");
+          setText(status, "Reconnecting to dataset preparation status…");
           window.setTimeout(poll, 900);
         }
       };
@@ -945,9 +976,7 @@
         if (!matches.length) {
           const empty = document.createElement("p");
           empty.className = "docs-search-empty";
-          empty.textContent = window.WorkbenchI18n?.isChinese()
-            ? `没有与“${input.value.trim()}”匹配的文档。`
-            : `No documentation matches “${input.value.trim()}”.`;
+          setText(empty, `No documentation matches “${input.value.trim()}”.`);
           results.append(empty);
           return;
         }
@@ -962,9 +991,9 @@
           result.setAttribute("aria-selected", "false");
 
           const context = document.createElement("small");
-          context.textContent = entry.kind === "Page" ? t("Page") : t(entry.page_title);
+          setText(context, entry.kind === "Page" ? "Page" : entry.page_title);
           const title = document.createElement("strong");
-          title.textContent = t(entry.title);
+          setText(title, entry.title);
           result.append(context, title);
           result.addEventListener("pointermove", () => setActiveResult(position));
           result.addEventListener("focus", () => setActiveResult(position));
@@ -973,6 +1002,7 @@
       };
 
       input.addEventListener("input", renderResults);
+      document.addEventListener("workbench:languagechange", renderResults);
       input.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           if (!input.value) return;
@@ -1017,6 +1047,12 @@
     window.WorkbenchI18n?.initialize();
     applyTheme(localStorage.getItem(preferenceKey) || "system");
     initializeScope();
+
+    document.addEventListener("workbench:languagechange", () => {
+      document.querySelectorAll("[data-plot]").forEach((chart) => { delete chart.dataset.plotReady; });
+      renderCharts();
+      updateThemeToggle(root.dataset.theme);
+    });
 
     document.addEventListener("change", (event) => {
       if (event.target.matches("[name='model_source'], [name='source_type'], [name='device_mode']")) refreshConditionals();

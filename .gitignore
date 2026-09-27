@@ -13,6 +13,11 @@ htmlcov/
 .nox/
 .hypothesis/
 
+# Browser dependencies and generated test artifacts
+node_modules/
+/tests/browser/test-results/
+/tests/browser/playwright-report/
+
 # Local environments and editor settings
 .env
 .env.*

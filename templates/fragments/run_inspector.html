@@ -2,7 +2,7 @@
   <div class="inspector-header">
     <div><span class="status-label {% if job.active %}is-live{% elif job.stage == 'completed' %}is-complete{% else %}is-error{% endif %}"><i></i>{{ 'Stopping' if job.stage == 'stopping' else ('Running' if job.active else job.stage | title) }}</span><h2>{{ job.kind | title }} run</h2></div>
   </div>
-  <dl class="run-summary"><div><dt>Run</dt><dd title="{{ job.run_dir }}">{{ job.run_dir.name }}</dd></div><div><dt>Process</dt><dd>{% if job.stage == 'stopping' %}Stopping{% elif job.active %}Active{% elif job.returncode is none %}Not started{% else %}Exit {{ job.returncode }}{% endif %}</dd></div></dl>
+  <dl class="run-summary"><div><dt>Run</dt><dd data-i18n-skip title="{{ job.run_dir }}">{{ job.run_dir.name }}</dd></div><div><dt>Process</dt><dd>{% if job.stage == 'stopping' %}Stopping{% elif job.active %}Active{% elif job.returncode is none %}Not started{% else %}Exit {{ job.returncode }}{% endif %}</dd></div></dl>
   {% if job.kind == 'train' %}
     <dl class="weight-facts"><div><dt>Best weights</dt><dd title="{{ weight_path(job, 'best.pt') or '' }}">{{ weight_path(job, 'best.pt') or 'Pending' }}</dd></div><div><dt>Last weights</dt><dd title="{{ weight_path(job, 'last.pt') or '' }}">{{ weight_path(job, 'last.pt') or 'Pending' }}</dd></div></dl>
   {% endif %}

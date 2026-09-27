@@ -31,8 +31,9 @@ The repository contains the matching Ultralytics source tree. Run the service fr
 - **Focused prediction:** run on image uploads, a video upload, or a local path. URL sources are intentionally not supported.
 - **Resumable uploads:** dataset ZIPs, `.pt` models, images, and videos use sequential 8 MiB chunks, retry transient failures, persist progress across refreshes, and verify the complete SHA-256 checksum before use.
 - **Visible run lifecycle:** one managed run at a time, with live status, command preview, logs, charts, weights, media previews, and a searchable run history.
+- **Training metrics:** loss, detection quality, and learning-rate charts refresh after each epoch writes to `results.csv`. Both standard YOLO losses and YOLOv10's one-to-many/one-to-one losses are supported, including a visible first-epoch point and charts in saved runs.
 - **Product documentation:** built-in Docs includes format conversion rules, parameter reference, runtime behavior, storage guidance, and recovery steps.
-- **Bilingual interface:** the top-bar `中/En` control follows the system language initially and lets each browser choose English or Chinese.
+- **Bilingual interface:** the top-bar `中/En` control switches pages, documentation, dynamic messages, and chart labels together. Chinese technical fields include the original English term. Commands, raw training logs, and user filenames retain their original content.
 
 ## Screenshots
 
@@ -100,6 +101,12 @@ python app.py
 ```
 
 The verification command should report CUDA `11.8`, `True`, and the detected GPU count. Do not use this branch for RTX 50-series/Blackwell GPUs; use the CUDA 12.8 branch instead.
+
+If `nvidia-smi` detects GPUs but PyTorch reports CUDA as unavailable, run the repository's runtime diagnostic:
+
+```bash
+python tools/check_cuda.py
+```
 
 When using Docker, launch the image with the NVIDIA runtime and pass the assigned GPUs through (`--gpus all` or `--gpus '"device=0,1"'`). The image requests both `compute` and `utility` driver capabilities; omitting `compute` can leave `nvidia-smi` working while `cuInit()` returns `CUDA_ERROR_UNKNOWN (999)`. A container where this still happens has a host/container driver-runtime problem; reinstalling Python packages inside that container cannot repair it. Recreate the container with the NVIDIA runtime or repair the host `nvidia_uvm` module and device mapping first.
 
@@ -186,13 +193,15 @@ Runtime directories are intentionally excluded from Git. This keeps uploaded dat
 
 ## Development
 
-The service runs directly from the checkout. After activating either Conda environment, install the development extras
+The service runs directly from the checkout. After activating your chosen Conda environment, install the development extras
 before running the test suite:
 
 ```bash
 pip install -e ".[dev]"
 pytest -q
 ```
+
+The [browser regression checks](tests/browser/README.md) cover language switching across pages and documentation, dynamic upload errors, and live chart rendering. They use Playwright with Chromium and mock training/upload responses; no GPU training or dataset changes are required. Node dependencies, browser reports, and test screenshots are excluded from Git.
 
 ## License
 

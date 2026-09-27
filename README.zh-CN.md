@@ -26,13 +26,14 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 
 ## 核心亮点
 
-- **以数据集为中心的训练：** 检查一个本地文件夹，识别支持的检测数据格式，验证后准备严格的 YOLO Detect 缓存；源文件保持不变。
+- **以数据集为中心的训练：** 输入服务器上的数据集文件夹路径，或向训练页面拖入一个 `.zip` 数据集压缩包，识别支持的检测数据格式，验证后准备严格的 YOLO Detect 缓存；源文件保持不变。
 - **实用的模型管理：** 可选择带本地校验缓存的预训练模型，或使用本地 `.pt` 文件、上传模型。
 - **专注的预测流程：** 支持图片上传、视频上传和本地路径；刻意不支持 URL 来源。
 - **可恢复上传：** 数据集 ZIP、`.pt` 模型、图片和视频都通过顺序 8 MiB 分片上传，自动重试短暂网络故障，刷新页面后可以继续，并在使用前校验完整 SHA-256。
 - **清晰的运行生命周期：** 同一时间只管理一个运行，提供实时状态、命令预览、日志、图表、权重、媒体预览和可搜索的运行历史。
+- **训练指标图表：** 每轮指标写入 `results.csv` 后，自动刷新损失（Loss）、检测质量（Detection quality）和学习率（Learning rate）图表。兼容常规 YOLO 损失与 YOLOv10 的一对多/一对一损失，首轮即可显示数据点，也可在历史运行中查看图表。
 - **产品级文档：** 内置 Docs 包含格式转换规则、参数参考、运行时行为、存储说明和恢复步骤。
-- **双语界面：** 顶栏 `中/En` 控件初始跟随系统语言，并允许每个浏览器在英文与中文之间切换。
+- **双语界面：** 顶栏 `中/En` 控件统一切换页面、文档、动态提示和图表标签；中文技术字段附带英文原词。命令、训练原始日志和用户文件名保留原始内容。
 
 ## 界面截图
 
@@ -55,48 +56,80 @@ YOLO-WebUI 是面向本地 Ultralytics Detect 工作流的自托管界面。数�
 
 ## 快速开始
 
-### NVIDIA GPU
+从以下三套安装方案中选择一套。每套都包含从克隆仓库开始的完整命令，并使用独立的 Conda 环境。如果当前终端无法使用 `conda activate`，请先执行一次 `conda init`，重新打开终端后再开始。
+
+PyTorch 安装包自带 CUDA 运行时，但 NVIDIA 驱动仍须支持该运行时；不能只根据系统的 `nvcc` 版本选择安装包。不要在同一个环境里混装不同运行时的依赖文件。
+
+### NVIDIA：CUDA 12.8 及以上（Blackwell / RTX 50 系列）
+
+NVIDIA Blackwell（包括 RTX 50 系列）或驱动支持 CUDA 12.8 及以上的设备使用此方案。它安装包含 `sm_120` 支持的 `cu128` PyTorch 安装包。
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
 cd yolov10-webui
 
-conda init
-conda create -n yolov10 python=3.10
-conda activate yolov10
+conda create -n yolov10-cu128 python=3.10 -y
+conda activate yolov10-cu128
 
-pip install -r requirements-cuda128.txt
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements-cuda128.txt
+python -m pip install -e .
 
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list(), torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-检查结果应显示 CUDA `12.8`、包含本机架构的列表（RTX 50 系列应包含 `sm_120`）、`True` 和识别到的 GPU 数量。如果 `nvidia-smi` 能看到 GPU 但这里返回 `False`，请运行详细诊断：
+检查结果应显示 CUDA `12.8`、包含本机架构的列表（RTX 50 系列应包含 `sm_120`）、`True` 和识别到的 GPU 数量。
 
-```bash
-python tools/check_cuda.py
-```
+### NVIDIA：CUDA 11.8 至 12.7（Blackwell 之前的显卡）
 
-旧版 NVIDIA 驱动或 CUDA 11.8 环境请使用 `requirements-cuda118.txt`。镜像已请求 `compute,utility` 两种 NVIDIA driver capability；缺少 `compute` 时可能出现 `nvidia-smi` 正常但 `cuInit()` 返回 `CUDA_ERROR_UNKNOWN (999)`。使用 Docker 时必须通过 NVIDIA runtime 把分配的 GPU 传入容器（`--gpus all` 或 `--gpus '"device=0,1"'`）。如果仍然出现 999，这是宿主机或容器的 NVIDIA 驱动运行时与设备映射问题，重新安装 Python 包无法修复；请先重建 NVIDIA runtime 容器，或在宿主机修复 `nvidia_uvm` 模块和 GPU 设备节点。随后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
-
-### CPU
+Blackwell 之前的 NVIDIA 显卡，且驱动支持的 CUDA 版本处于 11.8–12.7 范围时，使用此方案。`requirements-cuda118.txt` 安装 `cu118` PyTorch 安装包，无需另外安装系统 CUDA 工具包。
 
 ```bash
 git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
 cd yolov10-webui
 
-conda init
-conda create -n yolov10 python=3.10
-conda activate yolov10
+conda create -n yolov10-cu118 python=3.10 -y
+conda activate yolov10-cu118
 
-pip install -r requirements-cpu.txt
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements-cuda118.txt
+python -m pip install -e .
 
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_arch_list(), torch.cuda.is_available(), torch.cuda.device_count())"
 python app.py
 ```
 
-打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
+检查结果应显示 CUDA `11.8`、`True` 和识别到的 GPU 数量。RTX 50 系列 / Blackwell 显卡不能使用此方案，请选择 CUDA 12.8 方案。
+
+如果 `nvidia-smi` 能看到 GPU，但 PyTorch 报告 CUDA 不可用，请运行仓库中的运行时诊断：
+
+```bash
+python tools/check_cuda.py
+```
+
+使用 Docker 时必须通过 NVIDIA runtime 把分配的 GPU 传入容器（`--gpus all` 或 `--gpus '"device=0,1"'`）。镜像已请求 `compute,utility` 两种 NVIDIA 驱动能力；缺少 `compute` 时可能出现 `nvidia-smi` 正常但 `cuInit()` 返回 `CUDA_ERROR_UNKNOWN (999)`。如果仍然出现 999，这是宿主机或容器的 NVIDIA 驱动运行时与设备映射问题，重新安装 Python 包无法修复；请先重建 NVIDIA runtime 容器，或在宿主机修复 `nvidia_uvm` 模块和 GPU 设备节点。
+
+### 仅 CPU（CPU only）
+
+没有 NVIDIA GPU 或希望使用 CPU 时选择此方案。它安装仅 CPU 的 PyTorch 安装包，不需要 CUDA。
+
+```bash
+git clone https://github.com/LeoWang0814/YOLO-WebUI.git yolov10-webui
+cd yolov10-webui
+
+conda create -n yolov10-cpu python=3.10 -y
+conda activate yolov10-cpu
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements-cpu.txt
+python -m pip install -e .
+
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python app.py
+```
+
+检查结果中的 CUDA 可用状态应为 `False`。服务启动后打开 [http://127.0.0.1:7860](http://127.0.0.1:7860)。
 
 ## 启动选项
 
@@ -166,6 +199,8 @@ python app.py
 pip install -e ".[dev]"
 pytest -q
 ```
+
+[浏览器回归测试](tests/browser/README.md)覆盖页面与文档的语言切换、动态上传错误提示和实时图表渲染。测试使用 Playwright 和 Chromium，模拟训练与上传响应，无需启动 GPU 训练或修改数据集。Node 依赖、浏览器报告和测试截图均已排除在 Git 之外。
 
 ## 许可证
 

@@ -3,7 +3,7 @@
   {% if job and job.kind == 'train' %}
     {% if metrics.ready %}
       <div class="metric-strip">{% for metric in metrics.summary %}<div><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>{% endfor %}</div>
-      <div class="chart-grid"><div class="chart" data-plot='{{ metrics.figures.loss }}'></div><div class="chart" data-plot='{{ metrics.figures.quality }}'></div><div class="chart chart-wide" data-plot='{{ metrics.figures.learning_rate }}'></div></div>
+      {% include 'fragments/metric_charts.html' %}
       <div class="metrics-table-wrap"><table><thead><tr>{% for column in metrics.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead><tbody>{% for row in metrics.rows | reverse %}<tr>{% for column in metrics.columns %}<td>{{ row.get(column, '') }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
     {% else %}<div class="empty-output compact-empty"><i data-lucide="chart-no-axes-combined"></i><span>{{ metrics.message }}</span></div>{% endif %}
   {% elif job %}

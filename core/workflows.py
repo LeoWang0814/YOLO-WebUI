@@ -664,8 +664,9 @@ def _theme_layout(theme: str) -> Dict[str, Any]:
         "paper_bgcolor": "rgba(0,0,0,0)",
         "plot_bgcolor": "rgba(0,0,0,0)",
         "font": {"color": "#edf4f1" if dark else "#17221e"},
-        "margin": {"l": 38, "r": 16, "t": 34, "b": 30},
-        "legend": {"orientation": "h", "y": 1.16, "font": {"size": 11}},
+        "height": 360,
+        "margin": {"l": 45, "r": 20, "t": 42, "b": 100},
+        "legend": {"orientation": "h", "y": -0.2, "yanchor": "top", "x": 0, "font": {"size": 11}},
         "xaxis": {"gridcolor": "#33413c" if dark else "#dce5e0", "zeroline": False},
         "yaxis": {"gridcolor": "#33413c" if dark else "#dce5e0", "zeroline": False},
     }
@@ -680,7 +681,7 @@ def _find_column(frame: pd.DataFrame, name: str) -> Optional[str]:
     return alternative if alternative in frame.columns else None
 
 
-def _figure(frame: pd.DataFrame, series: List[Tuple[str, str]], theme: str) -> str:
+def _figure(frame: pd.DataFrame, series: List[Tuple[str, str]], theme: str, title: str = "") -> str:
     figure = go.Figure()
     x = frame["epoch"] if "epoch" in frame else list(range(1, len(frame) + 1))
     palette = ["#188cff", "#11a879", "#e25d4e", "#a56eff", "#d69b22", "#41a6a0"]
@@ -692,13 +693,13 @@ def _figure(frame: pd.DataFrame, series: List[Tuple[str, str]], theme: str) -> s
                     x=x,
                     y=pd.to_numeric(frame[column], errors="coerce"),
                     name=label,
-                    mode="lines",
-                    line={"width": 2, "color": palette[index % len(palette)]},
+                    mode="lines+markers" if len(frame) == 1 else "lines",
+                    line={"width": 2, "color": palette[index % len(palette)], "dash": "dot" if candidate.startswith("val/") else "solid"},
                 )
             )
     if not figure.data:
         figure.add_annotation(text="No data yet", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
-    figure.update_layout(**_theme_layout(theme), hovermode="x unified")
+    figure.update_layout(**_theme_layout(theme), title={"text": title, "font": {"size": 14}}, hovermode="x unified")
     return figure.to_json()
 
 
@@ -716,6 +717,8 @@ def metrics_snapshot(run_dir: Path, theme: str = "light") -> Dict[str, Any]:
     summary = []
     for label, key in (("mAP50-95", "metrics/mAP50-95(B)"), ("mAP50", "metrics/mAP50(B)"), ("Precision", "metrics/precision(B)"), ("Recall", "metrics/recall(B)"), ("Box loss", "train/box_loss")):
         column = _find_column(frame, key)
+        if not column and key == "train/box_loss":
+            column = _find_column(frame, "train/box_om") or _find_column(frame, "train/box_oo")
         value = pd.to_numeric(frame[column].iloc[-1], errors="coerce") if column else None
         summary.append({"label": label, "value": f"{float(value):.4f}" if value is not None and pd.notna(value) else "-"})
     rows = frame.tail(40).fillna("").to_dict(orient="records")
@@ -724,9 +727,33 @@ def metrics_snapshot(run_dir: Path, theme: str = "light") -> Dict[str, Any]:
         "message": "Metrics update from results.csv",
         "summary": summary,
         "figures": {
-            "loss": _figure(frame, [("train/box_loss", "Train box"), ("train/cls_loss", "Train class"), ("val/box_loss", "Val box"), ("val/cls_loss", "Val class")], theme),
-            "quality": _figure(frame, [("metrics/mAP50(B)", "mAP50"), ("metrics/mAP50-95(B)", "mAP50-95"), ("metrics/precision(B)", "Precision"), ("metrics/recall(B)", "Recall")], theme),
-            "learning_rate": _figure(frame, [("lr/pg0", "LR pg0"), ("lr/pg1", "LR pg1"), ("lr/pg2", "LR pg2")], theme),
+            "loss": _figure(
+                frame,
+                [
+                    ("train/box_loss", "Train box loss"),
+                    ("train/cls_loss", "Train class loss"),
+                    ("train/dfl_loss", "Train DFL loss"),
+                    ("train/box_om", "Train box loss (one-to-many)"),
+                    ("train/cls_om", "Train class loss (one-to-many)"),
+                    ("train/dfl_om", "Train DFL loss (one-to-many)"),
+                    ("train/box_oo", "Train box loss (one-to-one)"),
+                    ("train/cls_oo", "Train class loss (one-to-one)"),
+                    ("train/dfl_oo", "Train DFL loss (one-to-one)"),
+                    ("val/box_loss", "Validation box loss"),
+                    ("val/cls_loss", "Validation class loss"),
+                    ("val/dfl_loss", "Validation DFL loss"),
+                    ("val/box_om", "Validation box loss (one-to-many)"),
+                    ("val/cls_om", "Validation class loss (one-to-many)"),
+                    ("val/dfl_om", "Validation DFL loss (one-to-many)"),
+                    ("val/box_oo", "Validation box loss (one-to-one)"),
+                    ("val/cls_oo", "Validation class loss (one-to-one)"),
+                    ("val/dfl_oo", "Validation DFL loss (one-to-one)"),
+                ],
+                theme,
+                "Training and validation loss",
+            ),
+            "quality": _figure(frame, [("metrics/mAP50(B)", "mAP50"), ("metrics/mAP50-95(B)", "mAP50-95"), ("metrics/precision(B)", "Precision"), ("metrics/recall(B)", "Recall")], theme, "Detection quality"),
+            "learning_rate": _figure(frame, [("lr/pg0", "LR pg0"), ("lr/pg1", "LR pg1"), ("lr/pg2", "LR pg2")], theme, "Learning rate"),
         },
         "columns": list(frame.columns),
         "rows": rows,

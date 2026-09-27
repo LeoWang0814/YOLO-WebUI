@@ -55,7 +55,7 @@
     <details class="dataset-tree"><summary><span><i data-lucide="folder-tree"></i>Server folder structure</span><small>Only representative files are shown</small></summary>
       <div class="dataset-tree-list">
         {% for node in dataset.structure.nodes %}
-          <div class="dataset-tree-node" style="--tree-depth: {{ node.path.count('/') }}"><strong>{{ node.path }}</strong>{% if node.directories %}<span>dirs: {{ node.directories | join(', ') }}</span>{% endif %}{% if node.samples %}<span>samples: {{ node.samples | join(', ') }}{% if node.omitted %} · +{{ node.omitted }} more{% endif %}</span>{% endif %}</div>
+          <div class="dataset-tree-node" style="--tree-depth: {{ node.path.count('/') }}"><strong data-i18n-skip>{{ node.path }}</strong>{% if node.directories %}<span>dirs: {{ node.directories | join(', ') }}</span>{% endif %}{% if node.samples %}<span>samples: {{ node.samples | join(', ') }}{% if node.omitted %} · +{{ node.omitted }} more{% endif %}</span>{% endif %}</div>
         {% endfor %}
         {% if dataset.structure.truncated %}<small>Tree display truncated for safety.</small>{% endif %}
       </div>
